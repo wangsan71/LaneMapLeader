@@ -1,0 +1,29 @@
+node_modules/
+dist/
+.vite/
+coverage/
+*.local
+*.tsbuildinfo
+*.log
+.DS_Store
+.idea/
+.vscode/
+.omo/
+.codegraph/
+.playwright-mcp/
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*.jks
+*credentials*.json
+*secrets*.json
+
+# Local agent instructions
+AGENTS.md
