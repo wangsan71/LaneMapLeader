@@ -47,6 +47,37 @@ export function findNearestRoad(
   return best;
 }
 
+export function findNearestMatchingRoad(
+  lat: number,
+  lng: number,
+  roadDatabase: import('../types/roads').Road[],
+  heading: number,
+  maxHeadingDifference: number
+): RoadMatch | null {
+  let best: RoadMatch | null = null;
+
+  for (const road of roadDatabase) {
+    for (let i = 0; i < road.path.length - 1; i++) {
+      const p1 = road.path[i];
+      const p2 = road.path[i + 1];
+      const match: RoadMatch = {
+        road,
+        segmentIndex: i,
+        distance: pointToSegmentDistance(lat, lng, p1[0], p1[1], p2[0], p2[1]),
+      };
+
+      if (
+        roadHeadingDifference(match, heading) <= maxHeadingDifference &&
+        (!best || match.distance < best.distance)
+      ) {
+        best = match;
+      }
+    }
+  }
+
+  return best;
+}
+
 export function getDirection(
   match: RoadMatch,
   heading: number

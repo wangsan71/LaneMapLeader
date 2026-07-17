@@ -1,9 +1,9 @@
 import { useState, useCallback } from 'react';
 import type { Road, RoadMatch } from '../types/roads';
-import { findNearestRoad, getDirection, roadHeadingDifference } from '../utils/lanes';
+import { findNearestMatchingRoad, getDirection } from '../utils/lanes';
 import { getRoads } from '../services/roads';
 
-const MAX_DISTANCE = 120;
+const MAX_DISTANCE = 180;
 const MAX_HEADING_DIFFERENCE = 20;
 
 export function useRoadMatching() {
@@ -25,13 +25,6 @@ export function useRoadMatching() {
         return;
       }
 
-      const nearest = findNearestRoad(lat, lng, roads);
-      if (!nearest || nearest.distance > MAX_DISTANCE) {
-        setMatch(null);
-        setCurrentRoad(null);
-        return;
-      }
-
       let effectiveHeading: number | null = null;
 
       if (gpsHeading !== null && !isNaN(gpsHeading) && gpsHeading >= 0) {
@@ -40,10 +33,20 @@ export function useRoadMatching() {
         effectiveHeading = deviceHeading;
       }
 
-      if (
-        effectiveHeading === null ||
-        roadHeadingDifference(nearest, effectiveHeading) > MAX_HEADING_DIFFERENCE
-      ) {
+      if (effectiveHeading === null) {
+        setMatch(null);
+        setCurrentRoad(null);
+        return;
+      }
+
+      const nearest = findNearestMatchingRoad(
+        lat,
+        lng,
+        roads,
+        effectiveHeading,
+        MAX_HEADING_DIFFERENCE
+      );
+      if (!nearest || nearest.distance > MAX_DISTANCE) {
         setMatch(null);
         setCurrentRoad(null);
         return;

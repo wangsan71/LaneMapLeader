@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   roadBearing,
   findNearestRoad,
+  findNearestMatchingRoad,
   getDirection,
   roadHeadingDifference,
 } from './lanes';
@@ -171,6 +172,53 @@ describe('lanes utils', () => {
       expect(getDirection(match, 91)).toBe('backward');
       expect(getDirection(match, 270)).toBe('forward');
       expect(getDirection(match, 269)).toBe('backward');
+    });
+  });
+
+  describe('findNearestMatchingRoad', () => {
+    const northRoad: Road = {
+      id: 'north-road',
+      name: 'North Road',
+      path: [
+        [0, 0.001],
+        [1, 0.001],
+      ],
+      lanesForward: [],
+      lanesBackward: [],
+      highway: 'primary',
+      oneway: false,
+      length: 1000,
+    };
+    const eastRoad: Road = {
+      ...northRoad,
+      id: 'east-road',
+      name: 'East Road',
+      path: [
+        [0, 0],
+        [0, 1],
+      ],
+    };
+
+    it('selects a farther road when only it matches the heading', () => {
+      const match = findNearestMatchingRoad(
+        0,
+        0,
+        [eastRoad, northRoad],
+        0,
+        20
+      );
+      expect(match?.road.name).toBe('North Road');
+    });
+
+    it('excludes roads outside the heading tolerance', () => {
+      expect(findNearestMatchingRoad(0, 0, [eastRoad], 0, 20)).toBeNull();
+    });
+
+    it('excludes the opposite direction of a one-way road', () => {
+      const oneWayRoad = { ...northRoad, oneway: true };
+      expect(
+        findNearestMatchingRoad(0, 0, [oneWayRoad], 180, 20)
+      ).toBeNull();
     });
   });
 
