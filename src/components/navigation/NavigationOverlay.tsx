@@ -8,6 +8,7 @@ import {
   getManeuverText,
 } from '../../utils/formatters';
 import { LaneIcon } from '../lane/LaneIcons';
+import { getDistanceAlongStep } from '../../utils/navigation';
 
 export function NavigationOverlay() {
   const { state: ctx, stopNavigation } = useNavigationContext();
@@ -19,24 +20,41 @@ export function NavigationOverlay() {
 
   const steps = ctx.route.legs[0].steps;
   const currentStep = steps[ctx.currentStepIndex];
+  const actionStep = steps[Math.min(ctx.currentStepIndex + 1, steps.length - 1)];
+  const distanceToAction = currentStep && ctx.gpsPosition
+    ? getDistanceAlongStep(currentStep, ctx.gpsPosition)
+    : currentStep?.distance ?? 0;
   const { remainingDistance, remainingDuration } = ctx;
+  const actionText = actionStep
+    ? getManeuverText(
+        actionStep.maneuver.type,
+        actionStep.maneuver.modifier,
+        actionStep.maneuver.bearing_before,
+        actionStep.maneuver.bearing_after,
+        actionStep.name,
+        currentStep?.name
+      )
+    : '繼續直行';
+  const actionRoadName = actionStep?.name && actionStep.name !== currentStep?.name
+    ? actionStep.name
+    : '';
 
   return (
     <>
       {/* Top bar - current instruction */}
       <div className="absolute top-[calc(env(safe-area-inset-top)+1rem)] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-md z-40">
-        <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex-shrink-0 w-11 h-11 flex items-center justify-center">
+        <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg p-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex-shrink-0 w-9 h-9 flex items-center justify-center">
               {(() => {
-                const t = currentStep?.maneuver.type;
-                const m = currentStep?.maneuver.modifier;
-                const before = currentStep?.maneuver.bearing_before;
-                const after = currentStep?.maneuver.bearing_after;
-                const key = currentStep
+                const t = actionStep?.maneuver.type;
+                const m = actionStep?.maneuver.modifier;
+                const before = actionStep?.maneuver.bearing_before;
+                const after = actionStep?.maneuver.bearing_after;
+                const key = actionStep
                   ? getManeuverIconKey(t!, m, before, after)
                   : 'straight';
-                if (key) return <LaneIcon icon={key} size={44} />;
+                if (key) return <LaneIcon icon={key} size={36} />;
                 return (
                   <span className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white text-lg">
                     {t === 'arrive' ? '🏁' : t === 'depart' ? '🚗' : '🔄'}
@@ -45,22 +63,16 @@ export function NavigationOverlay() {
               })()}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-lg truncate">
-                {currentStep
-                  ? `${getManeuverText(
-                      currentStep.maneuver.type,
-                      currentStep.maneuver.modifier,
-                      currentStep.maneuver.bearing_before,
-                      currentStep.maneuver.bearing_after,
-                      currentStep.name,
-                      ctx.currentStepIndex > 0
-                        ? steps[ctx.currentStepIndex - 1].name
-                        : undefined
-                    )}${currentStep.name ? `，進入${currentStep.name}` : ''}`
-                  : '計算中...'}
+              <div className="flex items-baseline gap-2 truncate">
+                <span className="flex-shrink-0 text-xl font-bold text-blue-700">
+                  {formatDistance(distanceToAction)} 後
+                </span>
+                <span className="truncate text-base font-semibold">
+                  {actionText}{actionRoadName ? `，進入${actionRoadName}` : ''}
+                </span>
               </div>
-              <div className="text-sm text-gray-600">
-                {currentStep ? formatDistance(currentStep.distance) : ''}
+              <div className="text-xs text-gray-600">
+                {currentStep?.name ? `目前在 ${currentStep.name}` : '沿目前道路行駛'}
                 {remainingDistance > 0 &&
                   ` · 剩餘 ${formatDistance(remainingDistance)}`}
               </div>

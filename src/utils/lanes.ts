@@ -1,5 +1,9 @@
 import type { RoadMatch } from '../types/roads';
-import { pointToSegmentDistance, bearing as calcBearing } from './geo';
+import {
+  pointToSegmentDistance,
+  bearing as calcBearing,
+  normalizeAngle,
+} from './geo';
 
 export function roadBearing(road: { path: [number, number][] }): number {
   const p1 = road.path[0];
@@ -51,6 +55,19 @@ export function getDirection(
   let diff = Math.abs(heading - rb);
   if (diff > 180) diff = 360 - diff;
   return diff <= 90 ? 'forward' : 'backward';
+}
+
+export function roadHeadingDifference(match: RoadMatch, heading: number): number {
+  let rb = matchedSegmentBearing(match);
+
+  if (match.road.oneway && match.road.reversed) {
+    rb = normalizeAngle(rb + 180);
+  }
+
+  let diff = Math.abs(normalizeAngle(heading) - rb);
+  if (diff > 180) diff = 360 - diff;
+
+  return match.road.oneway ? diff : Math.min(diff, 180 - diff);
 }
 
 export const ICON_LIST = [

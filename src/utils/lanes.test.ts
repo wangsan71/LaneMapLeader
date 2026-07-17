@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { roadBearing, findNearestRoad, getDirection } from './lanes';
+import {
+  roadBearing,
+  findNearestRoad,
+  getDirection,
+  roadHeadingDifference,
+} from './lanes';
 import type { Road } from '../types/roads';
 
 describe('lanes utils', () => {
@@ -166,6 +171,45 @@ describe('lanes utils', () => {
       expect(getDirection(match, 91)).toBe('backward');
       expect(getDirection(match, 270)).toBe('forward');
       expect(getDirection(match, 269)).toBe('backward');
+    });
+  });
+
+  describe('roadHeadingDifference', () => {
+    const road: Road = {
+      id: 'heading-road',
+      name: 'Heading Road',
+      path: [
+        [0, 0],
+        [1, 0],
+      ],
+      lanesForward: [],
+      lanesBackward: [],
+      highway: 'primary',
+      oneway: false,
+      length: 1000,
+    };
+
+    const match = { road, segmentIndex: 0, distance: 0 };
+
+    it('uses the closest direction for a two-way road', () => {
+      expect(roadHeadingDifference(match, 20)).toBeCloseTo(20);
+      expect(roadHeadingDifference(match, 340)).toBeCloseTo(20);
+      expect(roadHeadingDifference(match, 200)).toBeCloseTo(20);
+    });
+
+    it('respects the travel direction of a one-way road', () => {
+      const oneWayMatch = { ...match, road: { ...road, oneway: true } };
+      expect(roadHeadingDifference(oneWayMatch, 20)).toBeCloseTo(20);
+      expect(roadHeadingDifference(oneWayMatch, 180)).toBeCloseTo(180);
+    });
+
+    it('reverses the allowed direction for a reversed one-way road', () => {
+      const reversedMatch = {
+        ...match,
+        road: { ...road, oneway: true, reversed: true },
+      };
+      expect(roadHeadingDifference(reversedMatch, 200)).toBeCloseTo(20);
+      expect(roadHeadingDifference(reversedMatch, 0)).toBeCloseTo(180);
     });
   });
 });

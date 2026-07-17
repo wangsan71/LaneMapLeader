@@ -10,7 +10,14 @@ export function GPSMarker({ lat, lng, heading }: GPSMarkerProps) {
   const hasHeading = heading !== null && !isNaN(heading) && heading >= 0;
 
   return (
-    <Marker longitude={lng} latitude={lat} anchor="center" offset={[0, 0]}>
+    <Marker
+      longitude={lng}
+      latitude={lat}
+      anchor="center"
+      offset={[0, 0]}
+      rotation={hasHeading ? heading : 0}
+      rotationAlignment="map"
+    >
       <div style={{ width: 64, height: 64, pointerEvents: 'none' }}>
         <svg width="64" height="64" viewBox="0 0 64 64">
           {/* glow */}
@@ -18,7 +25,7 @@ export function GPSMarker({ lat, lng, heading }: GPSMarkerProps) {
 
           {/* direction fan */}
           {hasHeading && (
-            <g transform={`rotate(${heading} 32 32)`}>
+            <g>
               <path
                 d="M 32 32 L 22 10 A 24 24 0 0 1 42 10 Z"
                 fill="rgba(26, 115, 232, 0.25)"

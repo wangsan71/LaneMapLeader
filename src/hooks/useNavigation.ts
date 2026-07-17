@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useNavigationContext } from '../context/NavigationContext';
 import { distance as calcDistance } from '../utils/geo';
+import { getDistanceAlongStep } from '../utils/navigation';
 
 const ARRIVAL_THRESHOLD = 30;
 
@@ -40,17 +41,11 @@ export function useNavigation() {
       return;
     }
 
-    const nextStep = steps[Math.min(currentStepIndex + 1, steps.length - 1)];
-    if (!nextStep) return;
+    const currentStep = steps[currentStepIndex];
+    if (!currentStep) return;
+    const distanceToNextAction = getDistanceAlongStep(currentStep, gpsPosition);
 
-    const distToNext = calcDistance(
-      gpsPosition.lat,
-      gpsPosition.lng,
-      nextStep.maneuver.location[1],
-      nextStep.maneuver.location[0]
-    );
-
-    if (distToNext < 20 && currentStepIndex < steps.length - 1) {
+    if (distanceToNextAction < 20 && currentStepIndex < steps.length - 1) {
       dispatch({ type: 'ADVANCE_STEP' });
     }
   }, [ctx, dispatch]);

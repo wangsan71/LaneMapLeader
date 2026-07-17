@@ -1,4 +1,5 @@
 import type { OSRMStep } from '../types/routing';
+import { distance as calcDistance } from './geo';
 
 export interface ParsedTurn {
   instruction: string;
@@ -45,4 +46,56 @@ export function getRemainingDistance(
     total += steps[i].distance;
   }
   return total;
+}
+
+export function getDistanceAlongStep(
+  step: OSRMStep,
+  gpsPosition: { lat: number; lng: number }
+): number {
+  const coordinates = step.geometry.coordinates as [number, number][];
+  if (coordinates.length < 2) {
+    const [lng, lat] = step.maneuver.location;
+    return calcDistance(gpsPosition.lat, gpsPosition.lng, lat, lng);
+  }
+
+  const latitudeScale = Math.cos((gpsPosition.lat * Math.PI) / 180);
+  let nearestSegment = 0;
+  let nearestT = 0;
+  let nearestDistanceSquared = Infinity;
+
+  for (let index = 0; index < coordinates.length - 1; index++) {
+    const [startLng, startLat] = coordinates[index];
+    const [endLng, endLat] = coordinates[index + 1];
+    const dx = (endLng - startLng) * latitudeScale;
+    const dy = endLat - startLat;
+    const px = (gpsPosition.lng - startLng) * latitudeScale;
+    const py = gpsPosition.lat - startLat;
+    const lengthSquared = dx * dx + dy * dy;
+    const t = lengthSquared === 0
+      ? 0
+      : Math.max(0, Math.min(1, (px * dx + py * dy) / lengthSquared));
+    const projectedX = px - t * dx;
+    const projectedY = py - t * dy;
+    const distanceSquared = projectedX * projectedX + projectedY * projectedY;
+
+    if (distanceSquared < nearestDistanceSquared) {
+      nearestDistanceSquared = distanceSquared;
+      nearestSegment = index;
+      nearestT = t;
+    }
+  }
+
+  const [startLng, startLat] = coordinates[nearestSegment];
+  const [endLng, endLat] = coordinates[nearestSegment + 1];
+  const projectedLng = startLng + (endLng - startLng) * nearestT;
+  const projectedLat = startLat + (endLat - startLat) * nearestT;
+  let remaining = calcDistance(projectedLat, projectedLng, endLat, endLng);
+
+  for (let index = nearestSegment + 1; index < coordinates.length - 1; index++) {
+    const [fromLng, fromLat] = coordinates[index];
+    const [toLng, toLat] = coordinates[index + 1];
+    remaining += calcDistance(fromLat, fromLng, toLat, toLng);
+  }
+
+  return remaining;
 }

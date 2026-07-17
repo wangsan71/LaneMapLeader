@@ -32,7 +32,7 @@ function AppContent() {
     useGeolocation({ throttleMs: 500 });
 
   const orientation = useOrientation();
-  const { currentRoad, direction, update: updateRoadMatch } = useRoadMatching();
+  const { match: roadMatch, currentRoad, direction, update: updateRoadMatch } = useRoadMatching();
   const {
     loading: routingLoading,
     error: routingError,
@@ -50,6 +50,8 @@ function AppContent() {
   const [usesGpsOrigin, setUsesGpsOrigin] = useState(false);
   const [mapClickMode, setMapClickMode] = useState<'origin' | 'dest' | null>(null);
   const [routePreference, setRoutePreference] = useState<RoutePreference>('balanced');
+  const [monitorMode, setMonitorMode] = useState(false);
+  const [gpsFollowMode, setGpsFollowMode] = useState(false);
 
   // Load road data
   useEffect(() => {
@@ -60,11 +62,6 @@ function AppContent() {
         setRoadsLoaded(true);
       });
   }, []);
-
-  // Auto-start GPS on mount for better UX
-  useEffect(() => {
-    startGps();
-  }, [startGps]);
 
   // Update navigation context with GPS
   useEffect(() => {
@@ -97,30 +94,28 @@ function AppContent() {
     }
   }, [position, orientation]);
 
-  // Follow the GPS during navigation. Head-up rotation is opt-in via the
-  // orientation control; the map remains in a top-down view.
+  const isDrivingMode = ctx.state === 'navigating' || monitorMode;
+  const isHeadUpMode = isDrivingMode || gpsFollowMode;
+
+  // Follow and center the GPS in head-up mode while navigating or monitoring.
   const prevFollowRef = React.useRef<{ lat: number; lng: number } | null>(null);
   useEffect(() => {
     if (!position || !mapRef.current) return;
     const map = mapRef.current.getMap();
 
-    if (ctx.state === 'navigating') {
+    if (isHeadUpMode) {
       let heading = 0;
-      if (orientation.isEnabled) {
-        // Prefer GPS direction while moving, then the device compass, then the
-        // bearing inferred from successive GPS fixes.
-        if (position.heading !== null && position.heading >= 0) {
-          heading = position.heading;
-        } else if (orientation.correctedHeading !== null) {
-          heading = orientation.correctedHeading;
-        } else if (prevFollowRef.current) {
-          const prev = prevFollowRef.current;
-          const moved = calcDistance(prev.lat, prev.lng, position.lat, position.lng);
-          if (moved > 3) {
-            heading = calcBearing(prev.lat, prev.lng, position.lat, position.lng);
-          } else {
-            heading = map.getBearing();
-          }
+      if (position.heading !== null && position.heading >= 0) {
+        heading = position.heading;
+      } else if (orientation.correctedHeading !== null) {
+        heading = orientation.correctedHeading;
+      } else if (prevFollowRef.current) {
+        const prev = prevFollowRef.current;
+        const moved = calcDistance(prev.lat, prev.lng, position.lat, position.lng);
+        if (moved > 3) {
+          heading = calcBearing(prev.lat, prev.lng, position.lat, position.lng);
+        } else {
+          heading = map.getBearing();
         }
       }
 
@@ -132,17 +127,17 @@ function AppContent() {
       });
       prevFollowRef.current = { lat: position.lat, lng: position.lng };
     }
-  }, [position, ctx.state, orientation.isEnabled, orientation.correctedHeading, mapRef]);
+  }, [position, isHeadUpMode, orientation.correctedHeading, mapRef]);
 
   // Reset camera rotation when leaving navigation mode.
   useEffect(() => {
-    if (ctx.state === 'navigating') return;
+    if (isHeadUpMode) return;
     prevFollowRef.current = null;
     const map = mapRef.current?.getMap();
     if (map && (map.getPitch() !== 0 || map.getBearing() !== 0)) {
       map.easeTo({ pitch: 0, bearing: 0, duration: 300 });
     }
-  }, [ctx.state, mapRef]);
+  }, [isHeadUpMode, mapRef]);
 
   // Update road matching
   useEffect(() => {
@@ -277,7 +272,9 @@ function AppContent() {
   const handleStartNavigation = useCallback(() => {
     startNavigation();
     if (!isGpsActive) startGps();
-  }, [startNavigation, isGpsActive, startGps]);
+    setGpsFollowMode(true);
+    void orientation.start();
+  }, [startNavigation, isGpsActive, orientation, startGps]);
 
   const handleCancelRoute = useCallback(() => {
     setSelectedOrigin(null);
@@ -290,9 +287,28 @@ function AppContent() {
   }, [clearRoutes, dispatch, stopNavigation]);
 
   const handleLocate = useCallback(() => {
-    if (isGpsActive) stopGps();
-    else startGps();
-  }, [isGpsActive, startGps, stopGps]);
+    if (isGpsActive) {
+      setMonitorMode(false);
+      setGpsFollowMode(false);
+      stopGps();
+    } else {
+      startGps();
+      setGpsFollowMode(true);
+      void orientation.start();
+    }
+  }, [isGpsActive, orientation, startGps, stopGps]);
+
+  const handleToggleMonitor = useCallback(() => {
+    setMonitorMode((enabled) => {
+      const next = !enabled;
+      if (next) {
+        if (!isGpsActive) startGps();
+        setGpsFollowMode(true);
+        void orientation.start();
+      }
+      return next;
+    });
+  }, [isGpsActive, orientation, startGps]);
 
   const isLoading = !roadsLoaded || routingLoading;
 
@@ -300,7 +316,7 @@ function AppContent() {
     <div className="relative w-full h-full overflow-hidden">
       {/* Map */}
       <MapView onClick={handleMapClick} mapRef={mapRef} cursor={mapClickMode ? 'crosshair' : 'grab'}>
-        <RoadLayer visible={roadsLoaded} />
+        <RoadLayer visible={roadsLoaded && ctx.state !== 'navigating'} />
         <RouteLayer
           route={ctx.route}
           routes={ctx.state === 'ready' ? rankedRoutes : []}
@@ -362,14 +378,14 @@ function AppContent() {
       )}
 
       {/* Search bar - visible in idle/planning mode */}
-      {ctx.state !== 'navigating' && (
+      {!isDrivingMode && (
         <div className="absolute top-[calc(env(safe-area-inset-top)+1rem)] left-4 right-4 z-40 flex justify-center">
           <SearchBar onSelectLocation={handleSearchSelect} />
         </div>
       )}
 
       {/* LaneGo road editor */}
-      {ctx.state !== 'navigating' && (
+      {!isDrivingMode && (
         <a
           href={`${import.meta.env.BASE_URL}editor.html`}
           className="absolute top-20 right-4 z-20 hidden rounded-lg bg-white/90 px-3 py-2 text-sm font-medium text-blue-700 shadow-md transition-colors hover:bg-white lg:block"
@@ -398,9 +414,14 @@ function AppContent() {
       <NavigationOverlay />
 
       {/* Lane card - visible when navigating and on a road */}
-      {ctx.state === 'navigating' && (
-        <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] left-1/2 -translate-x-1/2 z-30 w-full flex justify-center pointer-events-none">
-          <LaneCard road={currentRoad} direction={direction} />
+      {isDrivingMode && (
+        <div className={`absolute left-1/2 -translate-x-1/2 z-30 w-full flex justify-center pointer-events-none ${ctx.state === 'navigating' ? 'bottom-[calc(env(safe-area-inset-bottom)+4.25rem)]' : 'bottom-[calc(env(safe-area-inset-bottom)+1rem)]'}`}>
+          <LaneCard
+            road={currentRoad}
+            direction={direction}
+            compact
+            matchDistance={roadMatch?.distance}
+          />
         </div>
       )}
 
@@ -413,6 +434,8 @@ function AppContent() {
           onToggleOrientation={orientation.toggle}
           deviceHeading={orientation.smoothedHeading}
           onResetBearing={resetBearing}
+          monitorMode={monitorMode}
+          onToggleMonitor={handleToggleMonitor}
         />
       )}
 
@@ -421,20 +444,22 @@ function AppContent() {
           not overlap the bottom bar. */}
       {isGpsActive && position && ctx.state !== 'navigating' && (
         <div
-          className={`absolute left-4 z-10 ${
-            'bottom-[calc(env(safe-area-inset-bottom)+1rem)]'
-          }`}
+          className={`absolute z-40 ${isDrivingMode ? 'top-[calc(env(safe-area-inset-top)+1rem)] left-1/2 -translate-x-1/2' : 'left-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)]'}`}
         >
           <SpeedPanel
             speed={position.speed}
             heading={position.heading}
             accuracy={position.accuracy}
+            showHeading={!isDrivingMode}
+            roadName={isDrivingMode ? currentRoad?.name : undefined}
+            direction={direction}
+            compact={isDrivingMode}
           />
         </div>
       )}
 
       {/* Route planning mode indicator */}
-      {mapClickMode && (
+      {mapClickMode && !isDrivingMode && (
         <div className="absolute top-36 sm:top-32 left-1/2 -translate-x-1/2 z-20">
           <div className="bg-blue-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium shadow-lg whitespace-nowrap">
             {mapClickMode === 'origin'
@@ -445,7 +470,7 @@ function AppContent() {
       )}
 
       {/* Point selection buttons */}
-      {ctx.state !== 'navigating' && ctx.state !== 'arrived' && (
+      {!isDrivingMode && ctx.state !== 'arrived' && (
         <div className="absolute top-24 sm:top-20 left-1/2 -translate-x-1/2 z-10 flex gap-2">
           <button
             onClick={() => handlePointButtonClick('origin')}

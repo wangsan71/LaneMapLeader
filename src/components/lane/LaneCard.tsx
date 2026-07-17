@@ -5,12 +5,14 @@ import type { Road } from '../../types/roads';
 interface LaneCardProps {
   road: Road | null;
   direction: 'forward' | 'backward';
+  compact?: boolean;
+  matchDistance?: number;
 }
 
-export function LaneCard({ road, direction }: LaneCardProps) {
+export function LaneCard({ road, direction, compact = false, matchDistance }: LaneCardProps) {
   if (!road) {
     return (
-      <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg px-4 py-3 w-[calc(100%-2rem)] max-w-lg text-center text-sm text-gray-600">
+      <div className={`bg-white/95 backdrop-blur-sm rounded-xl shadow-lg w-[calc(100%-2rem)] max-w-lg text-center text-gray-600 ${compact ? 'px-3 py-2 text-xs' : 'px-4 py-3 text-sm'}`}>
         正在匹配目前道路與車道資料...
       </div>
     );
@@ -26,12 +28,19 @@ export function LaneCard({ road, direction }: LaneCardProps) {
   const dirText = direction === 'forward' ? '順向' : '反向';
 
   return (
-    <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg p-3 sm:p-4 w-[calc(100%-2rem)] max-w-lg">
-      <div className="font-semibold text-base mb-3 text-gray-800 flex items-center gap-2">
+    <div className={`bg-white/95 backdrop-blur-sm rounded-xl shadow-lg w-[calc(100%-2rem)] max-w-lg ${compact ? 'p-2.5' : 'p-3 sm:p-4'}`}>
+      <div className={`font-semibold text-gray-800 flex items-center gap-2 ${compact ? 'text-sm mb-2' : 'text-base mb-3'}`}>
         <span className="truncate">{road.name}</span>
         <span className="text-xs text-gray-400 font-normal flex-shrink-0">
           {dirText} · {total} 車道
         </span>
+      </div>
+
+      <div className={`flex flex-wrap items-center gap-x-2 text-gray-500 ${compact ? 'mb-2 text-[10px]' : 'mb-3 text-xs'}`}>
+        {matchDistance !== undefined && <span>距離 {Math.round(matchDistance)}m</span>}
+        <span>{road.highway || '道路'}</span>
+        <span>{Math.round(road.length)}m</span>
+        <span>{road.oneway ? '單向' : '雙向'}</span>
       </div>
 
       {total === 0 ? (
@@ -39,7 +48,7 @@ export function LaneCard({ road, direction }: LaneCardProps) {
           此路段尚未設定車道
         </div>
       ) : (
-        <div className="flex gap-3 overflow-x-auto pb-1">
+        <div className={`flex overflow-x-auto pb-1 ${compact ? 'gap-2' : 'gap-3'}`}>
           {lanes.map((lane, i) => {
             const iconKey =
               lane.icon &&
@@ -65,10 +74,10 @@ export function LaneCard({ road, direction }: LaneCardProps) {
             return (
               <div
                 key={i}
-                className="flex flex-col items-center bg-gray-50 rounded-xl p-2 sm:p-3 min-w-[72px] sm:min-w-[80px]"
+                className={`flex flex-col items-center bg-gray-50 rounded-xl ${compact ? 'p-1.5 min-w-[60px]' : 'p-2 sm:p-3 min-w-[72px] sm:min-w-[80px]'}`}
               >
-                <LaneIcon icon={iconKey} size={48} />
-                <span className="text-xs text-gray-600 mt-1.5 text-center leading-tight">
+                <LaneIcon icon={iconKey} size={compact ? 36 : 48} />
+                <span className={`${compact ? 'text-[11px] mt-1' : 'text-xs mt-1.5'} text-gray-600 text-center leading-tight`}>
                   {lane.label}
                 </span>
                 <span className="text-[10px] text-gray-400 mt-0.5">
