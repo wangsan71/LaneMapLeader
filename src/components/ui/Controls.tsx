@@ -1,4 +1,5 @@
 import React from 'react';
+import { useT } from '../../i18n';
 
 interface ControlsProps {
   onLocate: () => void;
@@ -9,6 +10,8 @@ interface ControlsProps {
   onResetBearing?: () => void;
   monitorMode: boolean;
   onToggleMonitor: () => void;
+  showRoads: boolean;
+  onToggleRoads: () => void;
 }
 
 export function Controls({
@@ -19,16 +22,40 @@ export function Controls({
   deviceHeading,
   monitorMode,
   onToggleMonitor,
+  showRoads,
+  onToggleRoads,
 }: ControlsProps) {
+  const t = useT();
   return (
     <div className="absolute bottom-24 right-4 z-10 flex flex-col gap-2">
+      {/* Road layer toggle */}
+      <button
+        onClick={onToggleRoads}
+        className={`w-10 h-10 rounded-full flex items-center justify-center shadow-md transition-all ${
+          showRoads
+            ? 'bg-blue-600 text-white'
+            : 'bg-white/90 text-gray-600 hover:bg-gray-100'
+        }`}
+        title={showRoads ? t('controls.hideRoads') : t('controls.showRoads')}
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24">
+          <path
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+          />
+        </svg>
+      </button>
+
       <button
         onClick={onToggleMonitor}
         className={`w-12 h-12 rounded-full flex items-center justify-center shadow-md transition-all ${
           monitorMode ? 'ring-3 ring-emerald-500 scale-105' : 'hover:scale-105'
         }`}
-        title={monitorMode ? '結束行車監控' : '啟動行車監控'}
-        aria-label={monitorMode ? '結束行車監控' : '啟動行車監控'}
+        title={monitorMode ? t('controls.stopMonitor') : t('controls.startMonitor')}
+        aria-label={monitorMode ? t('controls.stopMonitor') : t('controls.startMonitor')}
         aria-pressed={monitorMode}
       >
         <svg
@@ -70,7 +97,7 @@ export function Controls({
             ? 'bg-blue-600 text-white'
             : 'bg-white/90 text-gray-600 hover:bg-gray-100'
         }`}
-        title={isLocating ? '停止定位' : '開始定位'}
+        title={isLocating ? t('controls.stopLocating') : t('controls.startLocating')}
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
@@ -96,7 +123,7 @@ export function Controls({
             ? 'bg-blue-600 text-white'
             : 'bg-white/90 text-gray-600 hover:bg-gray-100'
         }`}
-        title={orientationEnabled ? '關閉方向感應' : '開啟方向感應'}
+        title={orientationEnabled ? t('controls.disableOrientation') : t('controls.enableOrientation')}
       >
         <svg
           className="w-5 h-5"

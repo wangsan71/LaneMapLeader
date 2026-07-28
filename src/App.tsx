@@ -23,10 +23,13 @@ import { bearing as calcBearing, distance as calcDistance } from './utils/geo';
 import type { NavPoint } from './types/navigation';
 import type { RoutePreference } from './types/routing';
 import { rankRoutes } from './utils/routePreferences';
+import { useT } from './i18n';
 
 function AppContent() {
   const { state: ctx, dispatch, setOrigin, setDestination, setRouteData } =
     useNavigationContext();
+
+  const t = useT();
 
   const { position, error: gpsError, isActive: isGpsActive, start: startGps, stop: stopGps } =
     useGeolocation({ throttleMs: 500 });
@@ -52,16 +55,17 @@ function AppContent() {
   const [routePreference, setRoutePreference] = useState<RoutePreference>('balanced');
   const [monitorMode, setMonitorMode] = useState(false);
   const [gpsFollowMode, setGpsFollowMode] = useState(false);
+  const [showRoads, setShowRoads] = useState(true);
 
   // Load road data
   useEffect(() => {
     loadRoads(`${import.meta.env.BASE_URL}data/macau/roads.json`)
       .then(() => setRoadsLoaded(true))
       .catch((error) => {
-        setRoadsError(error instanceof Error ? error.message : '道路資料載入失敗');
+        setRoadsError(error instanceof Error ? error.message : t('app.roadDataLoadError'));
         setRoadsLoaded(true);
       });
-  }, []);
+  }, [t]);
 
   // Update navigation context with GPS
   useEffect(() => {
@@ -157,14 +161,14 @@ function AppContent() {
 
   const handleSearchSelect = useCallback(
     (lat: number, lng: number, name: string) => {
-      const point: NavPoint = { lat, lng, name: name.split(',')[0] };
+    const point: NavPoint = { lat, lng, name: name.split(',')[0] };
       // Refresh an automatic origin from the latest GPS fix whenever the
       // destination changes. Explicitly selected origins remain unchanged.
       if ((!selectedOrigin || usesGpsOrigin) && position) {
         const gpsOrigin: NavPoint = {
           lat: position.lat,
           lng: position.lng,
-          name: '目前位置',
+          name: t('app.currentLocation'),
         };
         setSelectedOrigin(gpsOrigin);
         setUsesGpsOrigin(true);
@@ -183,7 +187,7 @@ function AppContent() {
       setUsesGpsOrigin(false);
       setOrigin(point);
     },
-    [selectedOrigin, usesGpsOrigin, position, setOrigin, setDestination]
+    [selectedOrigin, usesGpsOrigin, position, setOrigin, setDestination, t]
   );
 
   const handleMapClick = useCallback(
@@ -204,7 +208,7 @@ function AppContent() {
           const gpsOrigin: NavPoint = {
             lat: position.lat,
             lng: position.lng,
-            name: '目前位置',
+            name: t('app.currentLocation'),
           };
           setSelectedOrigin(gpsOrigin);
           setUsesGpsOrigin(true);
@@ -215,7 +219,7 @@ function AppContent() {
         setMapClickMode(null);
       }
     },
-    [mapClickMode, selectedOrigin, usesGpsOrigin, position, setOrigin, setDestination]
+    [mapClickMode, selectedOrigin, usesGpsOrigin, position, setOrigin, setDestination, t]
   );
 
   const handlePointButtonClick = useCallback(
@@ -310,13 +314,17 @@ function AppContent() {
     });
   }, [isGpsActive, orientation, startGps]);
 
+  const handleToggleRoads = useCallback(() => {
+    setShowRoads((v) => !v);
+  }, []);
+
   const isLoading = !roadsLoaded || routingLoading;
 
   return (
     <div className="relative w-full h-full overflow-hidden">
       {/* Map */}
       <MapView onClick={handleMapClick} mapRef={mapRef} cursor={mapClickMode ? 'crosshair' : 'grab'}>
-        <RoadLayer visible={roadsLoaded && ctx.state !== 'navigating'} />
+        <RoadLayer visible={roadsLoaded && showRoads && ctx.state !== 'navigating'} />
         <RouteLayer
           route={ctx.route}
           routes={ctx.state === 'ready' ? rankedRoutes : []}
@@ -362,7 +370,7 @@ function AppContent() {
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
             <span className="text-sm text-gray-600">
-              {routingLoading ? '路線計算中...' : '載入地圖資料...'}
+              {routingLoading ? t('app.calculatingRoute') : t('app.loadingMapData')}
             </span>
           </div>
         </div>
@@ -384,16 +392,16 @@ function AppContent() {
         </div>
       )}
 
-      {/* LaneGo road editor */}
-      {!isDrivingMode && (
+      {/* LaneGo road editor - hidden */}
+      {/* {!isDrivingMode && (
         <a
           href={`${import.meta.env.BASE_URL}editor.html`}
           className="absolute top-20 right-4 z-20 hidden rounded-lg bg-white/90 px-3 py-2 text-sm font-medium text-blue-700 shadow-md transition-colors hover:bg-white lg:block"
-          title="打开 LaneGo 道路及车道编辑器"
+          title={t('app.editorTooltip')}
         >
-          車道編輯器
+          {t('app.editorLink')}
         </a>
-      )}
+      )} */}
 
       {/* Route panel - visible when route is ready */}
       {ctx.state === 'ready' && ctx.route && (
@@ -436,6 +444,8 @@ function AppContent() {
           onResetBearing={resetBearing}
           monitorMode={monitorMode}
           onToggleMonitor={handleToggleMonitor}
+          showRoads={showRoads}
+          onToggleRoads={handleToggleRoads}
         />
       )}
 
@@ -463,8 +473,8 @@ function AppContent() {
         <div className="absolute top-36 sm:top-32 left-1/2 -translate-x-1/2 z-20">
           <div className="bg-blue-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium shadow-lg whitespace-nowrap">
             {mapClickMode === 'origin'
-              ? '請點擊地圖設定起點'
-              : '請點擊地圖設定終點'}
+              ? t('app.clickSetOrigin')
+              : t('app.clickSetDest')}
           </div>
         </div>
       )}
@@ -483,7 +493,7 @@ function AppContent() {
                 : 'bg-white text-gray-700 hover:bg-gray-100'
             }`}
           >
-            📍 設定起點
+            {t('app.setOrigin')}
           </button>
           <button
             onClick={() => handlePointButtonClick('dest')}
@@ -496,7 +506,7 @@ function AppContent() {
                 : 'bg-white text-gray-700 hover:bg-gray-100'
             }`}
           >
-            🎯 設定終點
+            {t('app.setDest')}
           </button>
         </div>
       )}
@@ -506,13 +516,13 @@ function AppContent() {
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl p-8 text-center max-w-sm mx-4">
             <div className="text-5xl mb-4">🎉</div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">已到達目的地！</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">{t('app.arrived')}</h2>
             <p className="text-gray-500 mb-6">{ctx.destination?.name}</p>
             <button
               onClick={handleCancelRoute}
               className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2.5 rounded-lg transition-colors"
             >
-              結束導航
+              {t('app.endNav')}
             </button>
           </div>
         </div>

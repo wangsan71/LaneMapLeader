@@ -1,4 +1,5 @@
 import React from 'react';
+import { useT } from '../../i18n';
 
 interface LoadingSpinnerProps {
   message?: string;
@@ -6,9 +7,11 @@ interface LoadingSpinnerProps {
 }
 
 export function LoadingSpinner({
-  message = '載入中...',
+  message: messageProp,
   fullScreen = false,
 }: LoadingSpinnerProps) {
+  const t = useT();
+  const message = messageProp ?? t('loading.default');
   const content = (
     <div className="flex flex-col items-center gap-3">
       <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />

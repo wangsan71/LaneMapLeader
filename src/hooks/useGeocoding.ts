@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { searchPlaces } from '../services/nominatim';
 import type { NominatimResult } from '../services/nominatim';
+import { t } from '../i18n/core';
 
 export function useGeocoding() {
   const [results, setResults] = useState<NominatimResult[]>([]);
@@ -26,7 +27,7 @@ export function useGeocoding() {
         const data = await searchPlaces(query);
         setResults(data);
       } catch {
-        setError('搜索失敗');
+        setError(t('search.failed'));
         setResults([]);
       } finally {
         setLoading(false);

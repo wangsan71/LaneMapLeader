@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useGeocoding } from '../../hooks/useGeocoding';
 import type { NominatimResult } from '../../services/nominatim';
+import { useT } from '../../i18n';
 
 interface SearchBarProps {
   onSelectLocation: (lat: number, lng: number, name: string) => void;
@@ -10,9 +11,11 @@ interface SearchBarProps {
 
 export function SearchBar({
   onSelectLocation,
-  placeholder = '搜索地點...',
+  placeholder: placeholderProp,
   compact = false,
 }: SearchBarProps) {
+  const t = useT();
+  const placeholder = placeholderProp ?? t('search.placeholder');
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const { results, loading, search, clear } = useGeocoding();

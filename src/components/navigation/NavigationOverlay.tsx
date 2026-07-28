@@ -9,10 +9,12 @@ import {
 } from '../../utils/formatters';
 import { LaneIcon } from '../lane/LaneIcons';
 import { getDistanceAlongStep } from '../../utils/navigation';
+import { useT } from '../../i18n';
 
 export function NavigationOverlay() {
   const { state: ctx, stopNavigation } = useNavigationContext();
   const [showSteps, setShowSteps] = useState(false);
+  const t = useT();
 
   if (ctx.state !== 'navigating' || !ctx.route || !ctx.route.legs[0]) {
     return null;
@@ -34,7 +36,7 @@ export function NavigationOverlay() {
         actionStep.name,
         currentStep?.name
       )
-    : '繼續直行';
+    : t('nav.continueStraight');
   const actionRoadName = actionStep?.name && actionStep.name !== currentStep?.name
     ? actionStep.name
     : '';
@@ -65,16 +67,16 @@ export function NavigationOverlay() {
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-2 truncate">
                 <span className="flex-shrink-0 text-xl font-bold text-blue-700">
-                  {formatDistance(distanceToAction)} 後
+                  {t('nav.afterDistance', { dist: formatDistance(distanceToAction) })}
                 </span>
                 <span className="truncate text-base font-semibold">
-                  {actionText}{actionRoadName ? `，進入${actionRoadName}` : ''}
+                  {actionText}{actionRoadName ? t('nav.enterRoad', { roadName: actionRoadName }) : ''}
                 </span>
               </div>
               <div className="text-xs text-gray-600">
-                {currentStep?.name ? `目前在 ${currentStep.name}` : '沿目前道路行駛'}
+                {currentStep?.name ? t('nav.currentlyOn', { name: currentStep.name }) : t('nav.followCurrentRoad')}
                 {remainingDistance > 0 &&
-                  ` · 剩餘 ${formatDistance(remainingDistance)}`}
+                  ` · ${t('nav.remaining', { dist: formatDistance(remainingDistance) })}`}
               </div>
             </div>
             <button
@@ -105,7 +107,7 @@ export function NavigationOverlay() {
             onClick={stopNavigation}
             className="text-red-400 hover:text-red-300 font-medium transition-colors"
           >
-            取消
+             {t('nav.cancel')}
           </button>
         </div>
       </div>

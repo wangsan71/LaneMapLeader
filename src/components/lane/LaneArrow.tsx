@@ -1,5 +1,6 @@
 import React from 'react';
 import { LaneIcon } from './LaneIcons';
+import { useT } from '../../i18n';
 
 interface LaneArrowProps {
   icon: string;
@@ -14,6 +15,7 @@ export const LaneArrow: React.FC<LaneArrowProps> = ({
   laneNumber,
   size = 48,
 }) => {
+  const t = useT();
   const validIcon = [
     'straight',
     'left',
@@ -40,7 +42,7 @@ export const LaneArrow: React.FC<LaneArrowProps> = ({
         {label}
       </span>
       <span className="text-[10px] text-gray-400 mt-0.5">
-        第 {laneNumber} 車道
+        {t('lane.laneNumber', { i: laneNumber })}
       </span>
     </div>
   );

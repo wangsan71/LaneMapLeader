@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import {
   formatDistance,
   formatDuration,
@@ -6,8 +6,12 @@ import {
   getManeuverIconKey,
   getManeuverText,
 } from './formatters';
+import { setLanguage } from '../i18n/core';
 
 describe('formatters', () => {
+  beforeAll(() => {
+    setLanguage('zh-Hant');
+  });
   describe('formatDistance', () => {
     it('formats distances under 1km in meters', () => {
       expect(formatDistance(0)).toBe('0m');

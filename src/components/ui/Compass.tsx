@@ -1,4 +1,5 @@
 import React from 'react';
+import { useT } from '../../i18n';
 
 interface CompassProps {
   heading: number | null;
@@ -7,6 +8,7 @@ interface CompassProps {
 }
 
 export function Compass({ heading, onClick, isEnabled }: CompassProps) {
+  const t = useT();
   return (
     <button
       onClick={onClick}
@@ -15,7 +17,7 @@ export function Compass({ heading, onClick, isEnabled }: CompassProps) {
           ? 'bg-blue-600 text-white'
           : 'bg-white/90 text-gray-600 hover:bg-gray-100'
       }`}
-      title={isEnabled ? '關閉方向感應' : '開啟方向感應'}
+      title={isEnabled ? t('compass.disable') : t('compass.enable')}
     >
       <svg
         viewBox="0 0 24 24"

@@ -1,3 +1,5 @@
+import { t } from '../i18n/core';
+
 export function formatDistance(meters: number): string {
   if (meters < 1000) {
     return `${Math.round(meters)}m`;
@@ -8,11 +10,14 @@ export function formatDistance(meters: number): string {
 export function formatDuration(seconds: number): string {
   const mins = Math.round(seconds / 60);
   if (mins < 60) {
-    return `${mins} 分鐘`;
+    return t('format.minutes', { n: mins });
   }
   const hrs = Math.floor(mins / 60);
   const remain = mins % 60;
-  return remain > 0 ? `${hrs} 小時 ${remain} 分鐘` : `${hrs} 小時`;
+  if (remain > 0) {
+    return t('format.hoursMinutes', { n: hrs, m: remain });
+  }
+  return t('format.hours', { n: hrs });
 }
 
 export function formatSpeed(mps: number): string {
@@ -46,44 +51,45 @@ export function getManeuverText(
 ): string {
   modifier = resolveTurnModifier(modifier, bearingBefore, bearingAfter);
   let text: string;
-  const modifiers: Record<string, string> = {
-    uturn: '迴轉',
-    'sharp right': '急右轉',
-    right: '右轉',
-    'slight right': '靠右',
-    straight: '直行',
-    'slight left': '靠左',
-    left: '左轉',
-    'sharp left': '急左轉',
+  const modifierKeys: Record<string, string> = {
+    uturn: 'maneuver.uturn',
+    'sharp right': 'maneuver.sharpRight',
+    right: 'maneuver.right',
+    'slight right': 'maneuver.slightRight',
+    straight: 'maneuver.straight',
+    'slight left': 'maneuver.slightLeft',
+    left: 'maneuver.left',
+    'sharp left': 'maneuver.sharpLeft',
   };
 
   if (type === 'roundabout' || type === 'rotary') {
-    text = '進入圓環';
+    text = t('maneuver.roundabout');
   } else if (type === 'arrive') {
-    text = '到達目的地';
+    text = t('maneuver.arrive');
   } else if (type === 'depart') {
-    text = '出發';
+    text = t('maneuver.depart');
   } else if (modifier) {
-    text = modifiers[modifier] || modifier;
+    const key = modifierKeys[modifier];
+    text = key ? t(key) : modifier;
   } else if (type === 'turn') {
-    text = '轉彎';
+    text = t('maneuver.turn');
   } else if (type === 'new name') {
-    text = '繼續直行';
+    text = t('maneuver.continueStraight');
   } else if (type === 'continue') {
-    text = '繼續';
+    text = t('maneuver.continue');
   } else {
     text = type;
   }
 
   const entersBridge = isBridgeRoad(roadName) && !isBridgeRoad(previousRoadName);
   const leavesBridge = !isBridgeRoad(roadName) && isBridgeRoad(previousRoadName);
-  if (type !== 'arrive' && entersBridge) return `${text}上橋`;
-  if (type !== 'depart' && leavesBridge) return `${text}下橋`;
+  if (type !== 'arrive' && entersBridge) return t('maneuver.ontoBridge', { text });
+  if (type !== 'depart' && leavesBridge) return t('maneuver.offBridge', { text });
   return text;
 }
 
 function isBridgeRoad(roadName?: string): boolean {
-  return Boolean(roadName && /(大橋|行車天橋|下層車道)/.test(roadName));
+  return Boolean(roadName && /(大橋|行車天橋|下層車道|bridge|viaduct|overpass|flyover)/i.test(roadName));
 }
 
 export function getManeuverIcon(

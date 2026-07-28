@@ -1,4 +1,5 @@
 import React from 'react';
+import { useT } from '../../i18n';
 
 interface SpeedPanelProps {
   speed: number | null;
@@ -19,6 +20,7 @@ export function SpeedPanel({
   direction,
   compact = false,
 }: SpeedPanelProps) {
+  const t = useT();
   const kmh = speed !== null ? Math.round(speed * 3.6) : null;
 
   return (
@@ -48,13 +50,13 @@ export function SpeedPanel({
       <div className="w-px h-6 bg-gray-200" />
 
       <div className="text-xs text-gray-500">
-        精度 {Math.round(accuracy)}m
+        {t('speed.accuracy', { accuracy: Math.round(accuracy) })}
       </div>
       {roadName && (
         <>
           <div className="w-px h-6 bg-gray-200" />
           <div className="max-w-32 truncate text-xs font-medium text-gray-700">
-            {roadName} · {direction === 'backward' ? '反向' : '順向'}
+            {roadName} · {direction === 'backward' ? t('speed.backward') : t('speed.forward')}
           </div>
         </>
       )}

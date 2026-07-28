@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { t } from '../i18n/core';
 
 export interface GpsPosition {
   lat: number;
@@ -24,7 +25,7 @@ export function useGeolocation(options: UseGeolocationOptions = {}) {
 
   const start = useCallback(() => {
     if (!navigator.geolocation) {
-      setError('瀏覽器不支援定位功能');
+      setError(t('geo.noSupport'));
       return;
     }
 
@@ -55,16 +56,16 @@ export function useGeolocation(options: UseGeolocationOptions = {}) {
       (err) => {
         switch (err.code) {
           case 1:
-            setError('等待定位權限');
+            setError(t('geo.waitingPermission'));
             break;
           case 2:
-            setError('GPS 訊號弱');
+            setError(t('geo.weakSignal'));
             break;
           case 3:
-            setError('定位逾時');
+            setError(t('geo.timeout'));
             break;
           default:
-            setError('定位失敗');
+            setError(t('geo.failed'));
         }
       },
       { enableHighAccuracy, timeout: 10000, maximumAge: 0 }

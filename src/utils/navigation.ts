@@ -1,5 +1,6 @@
 import type { OSRMStep } from '../types/routing';
 import { distance as calcDistance } from './geo';
+import { t } from '../i18n/core';
 
 export interface ParsedTurn {
   instruction: string;
@@ -17,9 +18,9 @@ export function parseSteps(steps: OSRMStep[]): ParsedTurn[] {
     const { maneuver } = step;
     const instruction =
       maneuver.type === 'arrive'
-        ? `到達 ${step.name || '目的地'}`
+        ? t('navUtil.arriveAt', { name: step.name || t('navUtil.destination') })
         : step.name
-          ? `往 ${step.name}`
+          ? t('navUtil.toward', { name: step.name })
           : maneuver.modifier || maneuver.type;
 
     return {

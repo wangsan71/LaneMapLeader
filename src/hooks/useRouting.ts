@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { OSRMRoute } from '../types/routing';
 import { fetchRoute } from '../services/osrm';
+import { t } from '../i18n/core';
 
 export function useRouting() {
   const [loading, setLoading] = useState(false);
@@ -20,14 +21,14 @@ export function useRouting() {
       try {
         const data = await fetchRoute(originLng, originLat, destLng, destLat);
         if (data.code !== 'Ok' || !data.routes.length) {
-          setError('找不到路線');
+          setError(t('route.noRoute'));
           setRoutes([]);
           return null;
         }
         setRoutes(data.routes);
         return data.routes;
       } catch (e) {
-        const msg = e instanceof Error ? e.message : '路線規劃失敗';
+        const msg = e instanceof Error ? e.message : t('route.planFailed');
         setError(msg);
         setRoutes([]);
         return null;

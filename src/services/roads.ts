@@ -1,4 +1,5 @@
 import type { Road } from '../types/roads';
+import { t } from '../i18n/core';
 
 let roadDatabase: Road[] = [];
 let isLoaded = false;
@@ -11,14 +12,14 @@ export async function loadRoads(
   try {
     const res = await fetch(dataUrl);
     if (!res.ok) {
-      throw new Error(`道路資料載入失敗 (${res.status})`);
+      throw new Error(t('road.fetchError', { status: String(res.status) }));
     }
     roadDatabase = await res.json();
     isLoaded = true;
     return roadDatabase;
   } catch (e) {
     console.warn('Failed to load road data:', e);
-    throw e instanceof Error ? e : new Error('道路資料載入失敗');
+    throw e instanceof Error ? e : new Error(t('road.loadError'));
   }
 }
 
