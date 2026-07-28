@@ -1,6 +1,10 @@
 # LaneMapLeader
 
-LaneMapLeader 是面向澳门道路的浏览器导航应用，整合路线规划、GPS 导航、设备方向感应、道路匹配、车道指引，以及 LaneGo 道路数据编辑工具。
+**简体中文** · [繁體中文](README.zh-Hant.md) · [English](README.en.md)
+
+---
+
+LaneMapLeader 是面向道路的浏览器导航应用，整合路线规划、GPS 导航、设备方向感应、道路匹配、车道指引，以及 LaneGo 道路数据编辑工具。
 
 ## 功能
 
@@ -10,7 +14,7 @@ LaneMapLeader 是面向澳门道路的浏览器导航应用，整合路线规划
 - 根据路口密度和转弯复杂度提供较保守的预计行车时间。
 - 使用 GPS 和设备方向感应跟随当前位置及行驶方向。
 - 显示繁体中文逐向导航、剩余距离、剩余时间和到达状态。
-- 匹配澳门本地道路，显示当前道路的顺向或反向车道指引。
+- 匹配本地道路，显示当前道路的顺向或反向车道指引。
 - 提供仅供桌面使用的道路及车道编辑器。
 - 提供 OSM PBF 转换、道路数据库构建及人工修正 CLI 工具。
 
@@ -56,7 +60,7 @@ npm run build
 
 ## 道路数据工具
 
-查询澳门道路数据：
+查询道路数据（以澳门为例）：
 
 ```bash
 npm run roads:edit -- info
@@ -75,9 +79,9 @@ npm run roads:apply
 npm run roads:build
 ```
 
-该命令需要 `public/data/macau/osm_fr.json`。
+该命令需要 `public/data/<city>/osm_fr.json`。
 
-从 OSM PBF 执行完整数据管线：
+从 OSM PBF 执行完整数据管线（以澳门为例）：
 
 ```bash
 npm run roads:pipeline -- path/to/macau.osm.pbf macau --keep-json
