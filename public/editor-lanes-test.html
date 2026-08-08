@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Editor 車道面板 模擬</title>
+  <script src="./traffic-icons.js"></script>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body{width:100%;height:100%;overflow:hidden;font-family:"Microsoft JhengHei","PingFang TC",Arial,sans-serif;background:#f3f4f6}
+    .wrap{display:flex;height:100vh}
+    .map{flex:1;background:linear-gradient(135deg,#dbeafe 0%,#e0e7ff 100%);position:relative;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:14px}
+    .panel{width:380px;background:rgba(255,255,255,0.98);box-shadow:-4px 0 24px rgba(0,0,0,0.15);overflow-y:auto;padding:20px;font-size:13px}
+    h3{margin:0 0 8px;font-size:16px;color:#202124}
+    .meta{color:#5f6368;font-size:12px;margin-bottom:16px}
+    .sec-title{font-weight:bold;color:#202124;margin:16px 0 8px;padding-bottom:4px;border-bottom:2px solid #1a73e8}
+    .lane-row{display:flex;align-items:center;gap:8px;padding:8px;margin:4px 0;background:#f8f9fa;border-radius:8px}
+    .lane-row .preview{width:36px;height:36px;flex-shrink:0}
+    .lane-row .preview svg{display:block;width:100%;height:100%}
+    .lane-row .info{flex:1}
+    .lane-row .info div{font-size:12px;color:#5f6368}
+    .lane-row select{padding:6px;border-radius:6px;border:1px solid #dadce0;font-size:13px;width:100%}
+    .junction{display:flex;gap:16px;margin:8px 0}
+    .junction label{cursor:pointer;font-size:13px;display:flex;align-items:center;gap:4px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="map">地圖區（已選取道路）</div>
+  <div class="panel">
+    <h3>✏️ 中心街 Rua Direita do Hipódromo</h3>
+    <div class="meta">ID: road_870 | 184.3m | primary | 座標點: 4</div>
+
+    <div class="sec-title">🚦 順向路口方向</div>
+    <div class="junction">
+      <label><input type="checkbox" checked>⬆ 直走</label>
+      <label><input type="checkbox">⬅ 左轉</label>
+      <label><input type="checkbox" checked>➡ 右轉</label>
+    </div>
+
+    <div class="sec-title">順向 (2 車道) 🟡 🔴 順向終點路口</div>
+    <div class="lane-row">
+      <div class="preview" id="p1"></div>
+      <div class="info">
+        <div>車道 1</div>
+        <select><option>直走</option><option selected>直走/右轉</option></select>
+      </div>
+    </div>
+    <div class="lane-row">
+      <div class="preview" id="p2"></div>
+      <div class="info">
+        <div>車道 2</div>
+        <select><option selected>直走</option></select>
+      </div>
+    </div>
+
+    <div class="sec-title">反向 (0 車道) 🟡 🔵 反向起點路口</div>
+    <div style="text-align:center;color:#9ca3af;padding:8px;font-size:12px">此方向未設定車道</div>
+
+    <div class="sec-title">全部車道圖標 (來自 traffic-icons.js)</div>
+    <div id="all-icons" style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-top:8px"></div>
+  </div>
+</div>
+
+<script>
+  // 模擬 editor 的 ICON_LIST / ICON_LABEL
+  const ICON_LIST=['straight','left','right','straight_left','straight_right','left_right','straight_left_right','u_turn','uturn_left','uturn_right','slight_left','slight_right','merge_left','merge_right'];
+  const ICON_LABEL={straight:'直走',left:'左轉',right:'右轉',straight_left:'直走/左轉',straight_right:'直走/右轉',left_right:'左轉/右轉',straight_left_right:'直走/左轉/右轉',u_turn:'迴轉',uturn_left:'左向迴轉',uturn_right:'右向迴轉',slight_left:'左前方',slight_right:'右前方',merge_left:'靠左',merge_right:'靠右'};
+
+  function laneIconMarkup(icon){return TRAFFIC_ICON_SVGS[icon]||TRAFFIC_ICON_SVGS.straight;}
+
+  // 渲染面板中已有的兩條車道
+  document.getElementById('p1').innerHTML = laneIconMarkup('straight_right');
+  document.getElementById('p2').innerHTML = laneIconMarkup('straight');
+
+  // 渲染全部圖標縮圖
+  const all = document.getElementById('all-icons');
+  ICON_LIST.forEach(ic => {
+    const cell = document.createElement('div');
+    cell.style.cssText = 'background:#f8f9fa;border-radius:6px;padding:4px;text-align:center';
+    cell.innerHTML = `<div style="width:32px;height:32px;margin:0 auto">${laneIconMarkup(ic)}</div><div style="font-size:10px;color:#5f6368;margin-top:2px">${ic}</div>`;
+    all.appendChild(cell);
+  });
+</script>
+</body>
+</html>

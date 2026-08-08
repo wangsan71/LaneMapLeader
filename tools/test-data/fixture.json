@@ -1,0 +1,284 @@
+{
+  "version": 0.6,
+  "generator": "generate-fixture.cjs",
+  "elements": [
+    {
+      "type": "node",
+      "id": 1,
+      "lat": 22.19,
+      "lon": 113.54
+    },
+    {
+      "type": "node",
+      "id": 2,
+      "lat": 22.192,
+      "lon": 113.54
+    },
+    {
+      "type": "node",
+      "id": 3,
+      "lat": 22.194,
+      "lon": 113.54
+    },
+    {
+      "type": "node",
+      "id": 4,
+      "lat": 22.196,
+      "lon": 113.54
+    },
+    {
+      "type": "node",
+      "id": 5,
+      "lat": 22.198,
+      "lon": 113.54
+    },
+    {
+      "type": "node",
+      "id": 6,
+      "lat": 22.2,
+      "lon": 113.54
+    },
+    {
+      "type": "node",
+      "id": 7,
+      "lat": 22.202,
+      "lon": 113.54
+    },
+    {
+      "type": "node",
+      "id": 10,
+      "lat": 22.196,
+      "lon": 113.538
+    },
+    {
+      "type": "node",
+      "id": 11,
+      "lat": 22.196,
+      "lon": 113.539
+    },
+    {
+      "type": "node",
+      "id": 12,
+      "lat": 22.196,
+      "lon": 113.54
+    },
+    {
+      "type": "node",
+      "id": 13,
+      "lat": 22.196,
+      "lon": 113.541
+    },
+    {
+      "type": "node",
+      "id": 14,
+      "lat": 22.196,
+      "lon": 113.542
+    },
+    {
+      "type": "node",
+      "id": 20,
+      "lat": 22.194,
+      "lon": 113.541
+    },
+    {
+      "type": "node",
+      "id": 21,
+      "lat": 22.194,
+      "lon": 113.542
+    },
+    {
+      "type": "node",
+      "id": 22,
+      "lat": 22.194,
+      "lon": 113.543
+    },
+    {
+      "type": "node",
+      "id": 30,
+      "lat": 22.205,
+      "lon": 113.54
+    },
+    {
+      "type": "node",
+      "id": 31,
+      "lat": 22.205,
+      "lon": 113.541
+    },
+    {
+      "type": "node",
+      "id": 32,
+      "lat": 22.204,
+      "lon": 113.541
+    },
+    {
+      "type": "node",
+      "id": 33,
+      "lat": 22.204,
+      "lon": 113.54
+    },
+    {
+      "type": "node",
+      "id": 40,
+      "lat": 22.2035,
+      "lon": 113.54
+    },
+    {
+      "type": "node",
+      "id": 41,
+      "lat": 22.205,
+      "lon": 113.5395
+    },
+    {
+      "type": "node",
+      "id": 50,
+      "lat": 22.2,
+      "lon": 113.54
+    },
+    {
+      "type": "node",
+      "id": 51,
+      "lat": 22.198,
+      "lon": 113.54
+    },
+    {
+      "id": 100,
+      "type": "way",
+      "nodes": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "tags": {
+        "highway": "primary",
+        "name": "南北大街",
+        "name:en": "North-South Main St",
+        "name:zh-Hant": "南北大街",
+        "name:zh-Hans": "南北大街",
+        "lanes": "4",
+        "turn:lanes": "through|through|right|right"
+      }
+    },
+    {
+      "id": 101,
+      "type": "way",
+      "nodes": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "tags": {
+        "highway": "primary",
+        "name": "南北大街",
+        "name:en": "North-South Main St",
+        "name:zh-Hant": "南北大街",
+        "lanes": "4",
+        "turn:lanes": "through|through|left|left"
+      }
+    },
+    {
+      "id": 200,
+      "type": "way",
+      "nodes": [
+        10,
+        11,
+        12
+      ],
+      "tags": {
+        "highway": "primary",
+        "name": "東西大道",
+        "name:en": "East-West Ave",
+        "name:zh-Hant": "東西大道",
+        "name:pt": "Avenida Leste-Oeste"
+      }
+    },
+    {
+      "id": 201,
+      "type": "way",
+      "nodes": [
+        12,
+        13,
+        14
+      ],
+      "tags": {
+        "highway": "primary",
+        "name": "東西大道",
+        "name:en": "East-West Ave",
+        "name:zh-Hant": "東西大道"
+      }
+    },
+    {
+      "id": 300,
+      "type": "way",
+      "nodes": [
+        3,
+        20,
+        21,
+        22
+      ],
+      "tags": {
+        "highway": "residential",
+        "name": "彎彎小路",
+        "name:en": "Winding Lane",
+        "oneway": "yes"
+      }
+    },
+    {
+      "id": 400,
+      "type": "way",
+      "nodes": [
+        30,
+        31,
+        32,
+        33,
+        30
+      ],
+      "tags": {
+        "highway": "primary",
+        "name": "中央環島",
+        "junction": "roundabout"
+      }
+    },
+    {
+      "id": 401,
+      "type": "way",
+      "nodes": [
+        40,
+        30
+      ],
+      "tags": {
+        "highway": "primary",
+        "name": "南北大街"
+      }
+    },
+    {
+      "id": 402,
+      "type": "way",
+      "nodes": [
+        33,
+        7
+      ],
+      "tags": {
+        "highway": "primary",
+        "name": "南北大街"
+      }
+    },
+    {
+      "id": 500,
+      "type": "way",
+      "nodes": [
+        50,
+        51
+      ],
+      "tags": {
+        "highway": "secondary",
+        "name": "友誼大橋",
+        "name:en": "Friendship Bridge",
+        "bridge": "yes",
+        "layer": "1",
+        "lanes": "3"
+      }
+    }
+  ]
+}

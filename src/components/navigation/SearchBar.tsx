@@ -51,7 +51,7 @@ export function SearchBar({
   );
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
+    function handleClickOutside(e: PointerEvent | MouseEvent | TouchEvent) {
       if (
         containerRef.current &&
         !containerRef.current.contains(e.target as Node)
@@ -59,8 +59,11 @@ export function SearchBar({
         setIsOpen(false);
       }
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    // `pointerdown` fires for mouse, pen, and touch on modern mobile browsers
+    // and is preferred over `mousedown` (which can be suppressed by
+    // long-press / context-menu flows on iOS Safari and Android Chrome).
+    document.addEventListener('pointerdown', handleClickOutside);
+    return () => document.removeEventListener('pointerdown', handleClickOutside);
   }, []);
 
   const handleFocus = useCallback(() => {

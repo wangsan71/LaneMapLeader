@@ -101,6 +101,15 @@ function AppContent() {
   const isDrivingMode = ctx.state === 'navigating' || monitorMode;
   const isHeadUpMode = isDrivingMode || gpsFollowMode;
 
+  // Mirror orientation.correctedHeading into a ref so the head-up camera
+  // follow effect can read the latest heading without re-running on every
+  // orientation event (which would stack easeTo animations and jitter the
+  // camera on mobile).
+  const correctedHeadingRef = React.useRef<number | null>(null);
+  useEffect(() => {
+    correctedHeadingRef.current = orientation.correctedHeading;
+  }, [orientation.correctedHeading]);
+
   // Follow and center the GPS in head-up mode while navigating or monitoring.
   const prevFollowRef = React.useRef<{ lat: number; lng: number } | null>(null);
   useEffect(() => {
@@ -111,8 +120,8 @@ function AppContent() {
       let heading = 0;
       if (position.heading !== null && position.heading >= 0) {
         heading = position.heading;
-      } else if (orientation.correctedHeading !== null) {
-        heading = orientation.correctedHeading;
+      } else if (correctedHeadingRef.current !== null) {
+        heading = correctedHeadingRef.current;
       } else if (prevFollowRef.current) {
         const prev = prevFollowRef.current;
         const moved = calcDistance(prev.lat, prev.lng, position.lat, position.lng);
@@ -131,7 +140,7 @@ function AppContent() {
       });
       prevFollowRef.current = { lat: position.lat, lng: position.lng };
     }
-  }, [position, isHeadUpMode, orientation.correctedHeading, mapRef]);
+  }, [position, isHeadUpMode, mapRef]);
 
   // Reset camera rotation when leaving navigation mode.
   useEffect(() => {
@@ -296,6 +305,10 @@ function AppContent() {
       setGpsFollowMode(false);
       stopGps();
     } else {
+      // Tapping "locate" is a passive action — drop any active monitor mode
+      // so we don't keep rendering the driving-style LaneCard while the user
+      // is just checking their position.
+      setMonitorMode(false);
       startGps();
       setGpsFollowMode(true);
       void orientation.start();
@@ -434,7 +447,7 @@ function AppContent() {
       )}
 
       {/* Controls */}
-      {ctx.state !== 'navigating' && (
+      {ctx.state !== 'navigating' && ctx.state !== 'ready' && (
         <Controls
           onLocate={handleLocate}
           isLocating={isGpsActive}

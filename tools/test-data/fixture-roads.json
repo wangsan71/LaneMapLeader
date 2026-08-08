@@ -1,0 +1,423 @@
+[
+  {
+    "id": "road_1",
+    "name": "東西大道",
+    "path": [
+      [
+        22.196,
+        113.538
+      ],
+      [
+        22.196,
+        113.54
+      ]
+    ],
+    "lanesForward": [
+      {
+        "icon": "straight_left",
+        "label": "直走 / 左轉"
+      },
+      {
+        "icon": "straight_right",
+        "label": "直走 / 右轉"
+      }
+    ],
+    "lanesBackward": [
+      {
+        "icon": "straight",
+        "label": "直走"
+      },
+      {
+        "icon": "straight",
+        "label": "直走"
+      }
+    ],
+    "highway": "primary",
+    "oneway": false,
+    "length": 205.91,
+    "_hadOsmTurn": false,
+    "_inferred": true
+  },
+  {
+    "id": "road_2",
+    "name": "東西大道",
+    "path": [
+      [
+        22.196,
+        113.54
+      ],
+      [
+        22.196,
+        113.542
+      ]
+    ],
+    "lanesForward": [
+      {
+        "icon": "straight",
+        "label": "直走"
+      },
+      {
+        "icon": "straight",
+        "label": "直走"
+      }
+    ],
+    "lanesBackward": [
+      {
+        "icon": "straight_left",
+        "label": "直走 / 左轉"
+      },
+      {
+        "icon": "straight_right",
+        "label": "直走 / 右轉"
+      }
+    ],
+    "highway": "primary",
+    "oneway": false,
+    "length": 205.91,
+    "_hadOsmTurn": false,
+    "_inferred": true
+  },
+  {
+    "id": "road_3",
+    "name": "南北大街",
+    "path": [
+      [
+        22.19,
+        113.54
+      ],
+      [
+        22.196,
+        113.54
+      ]
+    ],
+    "lanesForward": [
+      {
+        "icon": "straight",
+        "label": "直走"
+      },
+      {
+        "icon": "straight",
+        "label": "直走"
+      }
+    ],
+    "lanesBackward": [
+      {
+        "icon": "right",
+        "label": "右轉"
+      },
+      {
+        "icon": "right",
+        "label": "右轉"
+      }
+    ],
+    "highway": "primary",
+    "oneway": false,
+    "length": 667.17,
+    "_hadOsmTurn": true,
+    "_inferred": false
+  },
+  {
+    "id": "road_4",
+    "name": "南北大街",
+    "path": [
+      [
+        22.196,
+        113.54
+      ],
+      [
+        22.202,
+        113.54
+      ]
+    ],
+    "lanesForward": [
+      {
+        "icon": "straight",
+        "label": "直走"
+      },
+      {
+        "icon": "straight",
+        "label": "直走"
+      }
+    ],
+    "lanesBackward": [
+      {
+        "icon": "left",
+        "label": "左轉"
+      },
+      {
+        "icon": "left",
+        "label": "左轉"
+      }
+    ],
+    "highway": "primary",
+    "oneway": false,
+    "length": 667.17,
+    "_hadOsmTurn": true,
+    "_inferred": false
+  },
+  {
+    "id": "road_5",
+    "name": "南北大街",
+    "path": [
+      [
+        22.2035,
+        113.54
+      ],
+      [
+        22.205,
+        113.54
+      ]
+    ],
+    "lanesForward": [
+      {
+        "icon": "straight",
+        "label": "直走"
+      },
+      {
+        "icon": "right",
+        "label": "右轉"
+      }
+    ],
+    "lanesBackward": [
+      {
+        "icon": "straight",
+        "label": "直走"
+      },
+      {
+        "icon": "straight",
+        "label": "直走"
+      }
+    ],
+    "highway": "primary",
+    "oneway": false,
+    "length": 166.79,
+    "_hadOsmTurn": false,
+    "_inferred": true
+  },
+  {
+    "id": "road_6",
+    "name": "南北大街",
+    "path": [
+      [
+        22.204,
+        113.54
+      ],
+      [
+        22.202,
+        113.54
+      ]
+    ],
+    "lanesForward": [
+      {
+        "icon": "straight",
+        "label": "直走"
+      },
+      {
+        "icon": "straight",
+        "label": "直走"
+      }
+    ],
+    "lanesBackward": [
+      {
+        "icon": "straight",
+        "label": "直走"
+      },
+      {
+        "icon": "straight",
+        "label": "直走"
+      }
+    ],
+    "highway": "primary",
+    "oneway": false,
+    "length": 222.39,
+    "_hadOsmTurn": false,
+    "_inferred": false
+  },
+  {
+    "id": "road_7",
+    "name": "中央環島",
+    "path": [
+      [
+        22.204,
+        113.541
+      ],
+      [
+        22.204,
+        113.54
+      ]
+    ],
+    "lanesForward": [
+      {
+        "icon": "left",
+        "label": "左轉"
+      },
+      {
+        "icon": "straight",
+        "label": "直走"
+      }
+    ],
+    "lanesBackward": [],
+    "highway": "primary",
+    "oneway": true,
+    "length": 102.95,
+    "junction": "roundabout",
+    "_hadOsmTurn": false,
+    "_inferred": true
+  },
+  {
+    "id": "road_8",
+    "name": "中央環島",
+    "path": [
+      [
+        22.204,
+        113.54
+      ],
+      [
+        22.205,
+        113.54
+      ]
+    ],
+    "lanesForward": [
+      {
+        "icon": "straight",
+        "label": "直走"
+      },
+      {
+        "icon": "straight",
+        "label": "直走"
+      }
+    ],
+    "lanesBackward": [],
+    "highway": "primary",
+    "oneway": true,
+    "length": 111.2,
+    "junction": "roundabout",
+    "_hadOsmTurn": false,
+    "_inferred": false
+  },
+  {
+    "id": "road_9",
+    "name": "中央環島",
+    "path": [
+      [
+        22.205,
+        113.54
+      ],
+      [
+        22.205,
+        113.541
+      ]
+    ],
+    "lanesForward": [
+      {
+        "icon": "straight",
+        "label": "直走"
+      },
+      {
+        "icon": "straight",
+        "label": "直走"
+      }
+    ],
+    "lanesBackward": [],
+    "highway": "primary",
+    "oneway": true,
+    "length": 102.95,
+    "junction": "roundabout",
+    "_hadOsmTurn": false,
+    "_inferred": false
+  },
+  {
+    "id": "road_10",
+    "name": "中央環島",
+    "path": [
+      [
+        22.205,
+        113.541
+      ],
+      [
+        22.204,
+        113.541
+      ]
+    ],
+    "lanesForward": [
+      {
+        "icon": "straight",
+        "label": "直走"
+      },
+      {
+        "icon": "straight",
+        "label": "直走"
+      }
+    ],
+    "lanesBackward": [],
+    "highway": "primary",
+    "oneway": true,
+    "length": 111.2,
+    "junction": "roundabout",
+    "_hadOsmTurn": false,
+    "_inferred": false
+  },
+  {
+    "id": "road_11",
+    "name": "Friendship Bridge",
+    "path": [
+      [
+        22.2,
+        113.54
+      ],
+      [
+        22.198,
+        113.54
+      ]
+    ],
+    "lanesForward": [
+      {
+        "icon": "straight",
+        "label": "直走"
+      },
+      {
+        "icon": "straight",
+        "label": "直走"
+      }
+    ],
+    "lanesBackward": [
+      {
+        "icon": "straight",
+        "label": "直走"
+      }
+    ],
+    "highway": "secondary",
+    "oneway": false,
+    "length": 222.39,
+    "bridge": true,
+    "layer": 1,
+    "_hadOsmTurn": false,
+    "_inferred": false
+  },
+  {
+    "id": "road_12",
+    "name": "Winding Lane",
+    "path": [
+      [
+        22.194,
+        113.54
+      ],
+      [
+        22.194,
+        113.543
+      ]
+    ],
+    "lanesForward": [
+      {
+        "icon": "straight",
+        "label": "直走"
+      }
+    ],
+    "lanesBackward": [],
+    "highway": "residential",
+    "oneway": true,
+    "length": 308.87,
+    "_hadOsmTurn": false,
+    "_inferred": false
+  }
+]

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>車道使用標誌 預覽 (澳門交通標誌標線設置指引 201~214)</title>
+  <script src="./traffic-icons.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: "Microsoft JhengHei", "PingFang TC", Arial, sans-serif;
+      padding: 32px;
+      background: #f3f4f6;
+      color: #1f2937;
+    }
+    h1 { font-size: 22px; margin-bottom: 8px; }
+    h2 { font-size: 15px; color: #6b7280; font-weight: normal; margin-bottom: 24px; }
+    .section-title {
+      font-size: 16px;
+      font-weight: bold;
+      margin: 24px 0 12px;
+      color: #1e40af;
+      border-left: 4px solid #1e40af;
+      padding-left: 10px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 16px;
+      max-width: 1100px;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px 8px 12px;
+      text-align: center;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+    .card .icon { width: 80px; height: 80px; margin: 0 auto 10px; }
+    .card svg { display: block; width: 100%; height: 100%; }
+    .card .key { font-size: 12px; color: #6b7280; font-family: monospace; }
+    .card .label { font-size: 14px; color: #1f2937; margin-top: 2px; font-weight: 600; }
+    .card .ref { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <h1>澳門道路交通標誌標線設置指引 (2025.02.27) — 附錄 A 應遵標誌</h1>
+  <h2>圖號 201~214（強制方向）+ 補充圖標 (U-turn / slight / merge)。規範要求：藍底白箭頭、圓形 1000mm。</h2>
+
+  <div class="section-title">PDF 附錄 A 圖號 201~214</div>
+  <div class="grid" id="official"></div>
+
+  <div class="section-title">業務用 key (與 editor ICON_LIST 對齊)</div>
+  <div class="grid" id="business"></div>
+
+  <script>
+    const official = [
+      { id: '201', name: '向左', ref: '應遵方向' },
+      { id: '202', name: '向右', ref: '應遵方向' },
+      { id: '203', name: '左轉', ref: '應遵方向' },
+      { id: '204', name: '右轉', ref: '應遵方向' },
+      { id: '205', name: '直行', ref: '應遵方向' },
+      { id: '206', name: '左或右', ref: '可選擇' },
+      { id: '207', name: '左或直行', ref: '可選擇' },
+      { id: '208', name: '直行或右', ref: '可選擇' },
+      { id: '209', name: '左下繞障', ref: '必須繞過' },
+      { id: '210', name: '右下繞障', ref: '必須繞過' },
+      { id: '211', name: '左右分流', ref: '必須繞過' },
+      { id: '212', name: '環形', ref: '圓形地' },
+      { id: '213', name: '巴士專道', ref: '公共運輸' },
+      { id: '214', name: '電單車專道', ref: '電單車' },
+    ];
+
+    const business = [
+      { id: 'straight', name: '直走', ref: '= 205' },
+      { id: 'left', name: '左轉', ref: '= 203' },
+      { id: 'right', name: '右轉', ref: '= 204' },
+      { id: 'straight_left', name: '直走/左轉', ref: '= 207' },
+      { id: 'straight_right', name: '直走/右轉', ref: '= 208' },
+      { id: 'left_right', name: '左轉/右轉', ref: '= 206' },
+      { id: 'straight_left_right', name: '直走/左轉/右轉', ref: '補充' },
+      { id: 'u_turn', name: '迴轉', ref: '補充' },
+      { id: 'uturn_left', name: '左向迴轉', ref: '= u_turn' },
+      { id: 'uturn_right', name: '右向迴轉', ref: '補充' },
+      { id: 'slight_left', name: '左前方', ref: '= 209 變體' },
+      { id: 'slight_right', name: '右前方', ref: '= 210 變體' },
+      { id: 'merge_left', name: '靠左', ref: '= 209' },
+      { id: 'merge_right', name: '靠右', ref: '= 210' },
+    ];
+
+    function render(target, list) {
+      const g = document.getElementById(target);
+      list.forEach((it) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div class="icon">${TRAFFIC_ICON_SVGS[it.id]}</div>
+          <div class="label">${it.name}</div>
+          <div class="ref">${it.ref}</div>
+          <div class="key">${it.id}</div>
+        `;
+        g.appendChild(card);
+      });
+    }
+    render('official', official);
+    render('business', business);
+  </script>
+</body>
+</html>

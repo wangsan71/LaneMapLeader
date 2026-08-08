@@ -26591,7 +26591,7 @@
     "length": 113.02
   },
   {
-    "id": "road_548",
+    "id": "road_548_a",
     "name": "城市日前地 Praceta 24 de Junho",
     "path": [
       [
@@ -26601,6 +26601,30 @@
       [
         22.186724100000003,
         113.54636500000001
+      ],
+      [
+        22.187007668816808,
+        113.54711855417621
+      ]
+    ],
+    "lanesForward": [
+      {
+        "icon": "straight_right",
+        "label": "直走/右轉"
+      }
+    ],
+    "lanesBackward": [],
+    "highway": "residential",
+    "oneway": true,
+    "length": 94.25
+  },
+  {
+    "id": "road_548_b",
+    "name": "城市日前地 Praceta 24 de Junho",
+    "path": [
+      [
+        22.187007668816808,
+        113.54711855417621
       ],
       [
         22.187008100000003,
@@ -26624,7 +26648,7 @@
     "lanesBackward": [],
     "highway": "residential",
     "oneway": true,
-    "length": 126.67
+    "length": 32.42
   },
   {
     "id": "road_549",
@@ -40735,12 +40759,12 @@
     ],
     "lanesForward": [
       {
-        "icon": "straight",
-        "label": "直走"
+        "icon": "straight_left",
+        "label": "直走/左轉"
       },
       {
-        "icon": "straight_right",
-        "label": "直走/右轉"
+        "icon": "straight",
+        "label": "直走"
       }
     ],
     "lanesBackward": [],
@@ -111508,8 +111532,8 @@
     ],
     "lanesForward": [
       {
-        "icon": "left",
-        "label": "左轉"
+        "icon": "right",
+        "label": "右轉"
       },
       {
         "icon": "right",
@@ -163141,12 +163165,12 @@
     ],
     "lanesForward": [
       {
-        "icon": "straight_left",
-        "label": "直走 / 左轉"
+        "icon": "right",
+        "label": "右轉"
       },
       {
-        "icon": "straight_right",
-        "label": "直走 / 右轉"
+        "icon": "right",
+        "label": "右轉"
       }
     ],
     "lanesBackward": [],
@@ -164459,8 +164483,8 @@
     ],
     "lanesForward": [
       {
-        "icon": "straight",
-        "label": "直走"
+        "icon": "straight_left",
+        "label": "直走/左轉"
       },
       {
         "icon": "straight",

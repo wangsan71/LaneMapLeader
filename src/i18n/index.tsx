@@ -30,6 +30,12 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setLanguage(lang);
+    // Keep the document lang attribute in sync so mobile screen readers
+    // (TalkBack / VoiceOver) pronounce text in the active language rather
+    // than whatever was hardcoded in index.html.
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = lang;
+    }
   }, [lang]);
 
   return (

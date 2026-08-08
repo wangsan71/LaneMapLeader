@@ -1,6 +1,5 @@
 import React, { useCallback } from 'react';
 import Map, {
-  NavigationControl,
   AttributionControl,
   MapRef,
 } from 'react-map-gl/maplibre';
@@ -44,7 +43,6 @@ export function MapView({ children, onClick, mapRef, cursor }: MapViewProps) {
         reuseMaps
       >
         <AttributionControl compact position="bottom-left" />
-        <NavigationControl showCompass position="bottom-right" />
         {children}
       </Map>
     </div>

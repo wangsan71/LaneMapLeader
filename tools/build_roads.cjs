@@ -1,740 +1,471 @@
+'use strict';
+
+/**
+ * 道路資料建置（OSM JSON → roads.json）
+ *
+ * Pipeline:
+ *   1. 載入 OSM JSON（pbf_to_json.cjs 產出）
+ *   2. 索引節點 → 座標
+ *   3. 過濾可接受的 highway 類型
+ *   4. 構建交叉路口圖
+ *   5. 對每條 way：
+ *      - 解析多語種名稱
+ *      - 解析 turn:lanes（含 forward/backward/both）
+ *      - 解決單向 / 車道數
+ *      - 路徑去重 + RDP 簡化
+ *      - 按路口 + 道路等級切段
+ *      - 微段合併
+ *      - 在有真實路口的端點用 lane-inferrer 推斷
+ *   6. 套用手動修正
+ *   7. 合併相鄰相容路段
+ *   8. 重新編號、清理內部欄位
+ *   9. 輸出 + 統計報告
+ */
+
 const fs = require('fs');
 const path = require('path');
 
-// ── 命令列參數 ──
-const city = process.argv[2] || 'macau';
+const geo = require('./lib/geo.cjs');
+const { resolveName } = require('./lib/name-resolver.cjs');
+const { parseTurnLanes } = require('./lib/lane-parser.cjs');
+const { buildIntersectionGraph, MIN_INTERSECTION_BRANCHES } = require('./lib/intersection-graph.cjs');
+const { preprocessWay, mergeMicroSegments } = require('./lib/segmenter.cjs');
+const { inferLanesForEndpoint, endpointBearing, startBearing } = require('./lib/lane-inferrer.cjs');
+const { loadOverrides, applyOverrides } = require('./lib/overrides.cjs');
+const {
+  isOneway,
+  resolveLaneCounts,
+  defaultStraightLanes,
+  buildRoad,
+  mergeRoads,
+  finalize,
+} = require('./lib/road-builder.cjs');
+const { loadExclusions, shouldExclude } = require('./lib/exclusions.cjs');
+const { summarize, formatReport } = require('./lib/stats.cjs');
+
+const ACCEPTED_HIGHWAYS = new Set([
+  'motorway', 'motorway_link', 'trunk', 'trunk_link',
+  'primary', 'primary_link', 'secondary', 'secondary_link',
+  'tertiary', 'tertiary_link',
+  'residential', 'unclassified', 'living_street', 'road',
+  'service',
+]);
+
+const args = parseArgs(process.argv.slice(2));
+const city = args.city || 'macau';
 const cityDir = path.join(__dirname, '..', 'public', 'data', city);
-const inputFile = path.join(cityDir, 'osm_fr.json');
-const outputFile = path.join(cityDir, 'roads.json');
+const inputFile = args.input || path.join(cityDir, 'osm_fr.json');
+const outputFile = args.output || path.join(cityDir, 'roads.json');
 
-if (!fs.existsSync(inputFile)) {
-    console.error(`找不到輸入檔案: ${inputFile}`);
-    console.error('請先執行: node pbf_to_json.js <xxx.pbf> data/' + city + '/osm_fr.json');
+function parseArgs(argv) {
+  const out = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--input' || a === '-i') out.input = argv[++i];
+    else if (a === '--output' || a === '-o') out.output = argv[++i];
+    else if (a === '--exclude-file') out.excludeFile = argv[++i];
+    else if (a === '--no-merge') out.noMerge = true;
+    else if (a === '--no-rdp') out.noRdp = true;
+    else if (a === '--no-overrides') out.noOverrides = true;
+    else if (a === '-h' || a === '--help') {
+      printHelp();
+      process.exit(0);
+    } else if (!a.startsWith('-')) {
+      out.city = a;
+    }
+  }
+  return out;
+}
+
+function printHelp() {
+  console.log(`
+用法: node build_roads.cjs [城市] [選項]
+
+參數:
+  [城市]            城市代碼（預設 macau）
+
+選項:
+  -i, --input       輸入 OSM JSON 檔（預設 public/data/<city>/osm_fr.json）
+  -o, --output      輸出檔（預設 public/data/<city>/roads.json）
+      --exclude-file 額外排除列表 JSON
+      --no-merge    跳過相鄰路段合併
+      --no-rdp      跳過 Douglas-Peucker 簡化
+      --no-overrides 不套用手動修正
+  -h, --help        顯示此說明
+`);
+}
+
+function main() {
+  const t0 = Date.now();
+  console.log(`\n城市: ${city}`);
+  console.log(`輸入: ${inputFile}`);
+
+  if (!fs.existsSync(inputFile)) {
+    console.error(`找不到輸入檔: ${inputFile}`);
+    console.error('請先執行 pbf_to_json.cjs');
     process.exit(1);
-}
+  }
 
-console.log(`\n城市: ${city}`);
-console.log(`輸入: ${inputFile}`);
+  const data = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
 
-const data = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
-
-const nodes = {};
-const ways = [];
-
-data.elements.forEach(el => {
-    if (el.type === 'node') {
-        nodes[el.id] = [el.lat, el.lon];
-    } else if (el.type === 'way' && el.tags && el.tags.highway) {
-        ways.push(el);
+  // ── 索引節點 ──
+  const nodeCoords = new Map();
+  for (const el of data.elements) {
+    if (el.type === 'node' && typeof el.lat === 'number' && typeof el.lon === 'number') {
+      nodeCoords.set(el.id, [el.lat, el.lon]);
     }
-});
+  }
+  console.log(`  ✓ 節點索引: ${nodeCoords.size}`);
 
-// ── 已包含道路類型 ──
-const includeHighways = new Set([
-    'motorway', 'motorway_link', 'trunk', 'trunk_link',
-    'primary', 'primary_link', 'secondary', 'secondary_link',
-    'tertiary', 'tertiary_link',
-    'residential', 'unclassified', 'living_street', 'road',
-    'service'
-]);
+  // ── 過濾可接受的 way ──
+  const acceptedWays = [];
+  for (const el of data.elements) {
+    if (el.type !== 'way') continue;
+    if (!el.tags || !el.tags.highway) continue;
+    if (!ACCEPTED_HIGHWAYS.has(el.tags.highway)) continue;
+    if (!el.nodes || el.nodes.length < 2) continue;
+    acceptedWays.push(el);
+  }
+  console.log(`  ✓ 候選 way: ${acceptedWays.length}`);
 
-// ── 各道路類型預設車道數 ──
-const defaultLanesByType = {
-    'motorway': 4, 'motorway_link': 2,
-    'trunk': 4, 'trunk_link': 2,
-    'primary': 3, 'primary_link': 1,
-    'secondary': 2, 'secondary_link': 1,
-    'tertiary': 2, 'tertiary_link': 1,
-    'residential': 1, 'unclassified': 1,
-    'living_street': 1, 'road': 1,
-    'service': 1
-};
+  // ── 排除列表 ──
+  const excluder = loadExclusions({ cityDir, excludeFile: args.excludeFile });
 
-// ── 路名排除列表（完整匹配）──
-const excludeNames = new Set([
-    '横琴', '橫琴', '环岛', '環島', '情侣路', '情侶路', '长隆', '長隆',
-    '荣澳', '榮澳', '琴海', '汇通', '匯通', '海翼橋', '海琴桥', '海琴橋',
-    '非桥', '非橋', '艺文', '藝文',
-    '天羽道', '伯牙', '知音', '宝盛路', '寶盛路', '富祥湾', '富祥灣',
-    '屏湾', '屏灣', '会展', '會展', '通航', '银湾路', '銀灣路',
-    '大横琴山', '大橫琴山', '福临道', '福臨道', '安临路', '安臨路',
-    '吉临路', '吉臨路', '香江路', '粤华路', '粵華路', '顺景路', '順景路',
-    '荣港道', '榮港道', '十字门', '十字門',
-    '南湾北路', '南灣北路', '南湾南路', '南灣南路', '桂花南路',
-    '港澳大道', '港澳大道辅路', '港澳大道輔路',
-    '前河东路', '前河東路', '前河西路', '港昌路',
-    '侨光路', '僑光路', '昌平路', '湾仔', '灣仔',
-    '珠三角环线', '珠三角環線', '拱北湾大桥', '拱北灣大橋',
-    '祥澳路', '荣粤道', '榮粤道', '兴澳路', '興澳路',
-    '联澳路', '聯澳路', '观澳路', '觀澳路', '海鸣桥', '海鳴橋',
-    '珠澳路', '子期', '琴石道', '琴石隧道',
-    '海贝桥', '海貝橋', '海韵橋', '海韻橋', '海韻桥',
-    '依依桥', '依依橋', '富琴道', '都会道', '都會道',
-    '北珠', '岛东路', '島東路', '兴盛三路', '興盛三路', '富城道'
-]);
+  // ── 構建路口圖 ──
+  const acceptedWayIds = new Set(acceptedWays.map(w => w.id));
+  const graph = buildIntersectionGraph(data.elements, acceptedWayIds);
+  console.log(`  ✓ 路口節點: ${graph.intersectionNodes.size}（≥ ${MIN_INTERSECTION_BRANCHES} 條 way 共享）`);
+  console.log(`  ✓ 端點節點: ${graph.endpointNodes.size}`);
 
-function shouldExclude(name) {
-    return excludeNames.has(name);
-}
+  // ── 處理每條 way ──
+  const allSegments = [];
+  let processedWays = 0;
+  let skippedByName = 0;
+  let skippedByCoords = 0;
+  let osmTurnWays = 0;
 
-// ── 轉向標記解析（OSM turn:lanes 標籤）──
-function parseTurnLanes(value) {
-    if (!value) return null;
-    const singleMapping = {
-        'left': { icon: 'left', label: '左轉' },
-        'slight_left': { icon: 'slight_left', label: '左前方' },
-        'sharp_left': { icon: 'left', label: '左轉' },
-        'through': { icon: 'straight', label: '直走' },
-        'right': { icon: 'right', label: '右轉' },
-        'slight_right': { icon: 'slight_right', label: '右前方' },
-        'sharp_right': { icon: 'right', label: '右轉' },
-        'merge_to_left': { icon: 'merge_left', label: '靠左' },
-        'merge_to_right': { icon: 'merge_right', label: '靠右' },
-        'reverse': { icon: 'u_turn', label: '迴轉' },
-        'none': { icon: 'straight', label: '直走' }
-    };
-    return value.split('|').map(part => {
-        const turns = part.split(';').map(t => t.trim()).filter(t => t);
-        if (turns.length === 0) return { icon: 'straight', label: '直走' };
-        if (turns.length === 1) return singleMapping[turns[0]] || { icon: 'straight', label: '直走' };
-        const hasLeft = turns.includes('left') || turns.includes('slight_left') || turns.includes('sharp_left');
-        const hasRight = turns.includes('right') || turns.includes('slight_right') || turns.includes('sharp_right');
-        const hasThrough = turns.includes('through') || turns.includes('none');
-        if (hasLeft && hasThrough) return { icon: 'straight_left', label: '直走 / 左轉' };
-        if (hasRight && hasThrough) return { icon: 'straight_right', label: '直走 / 右轉' };
-        if (hasLeft && hasRight) return { icon: 'left_right', label: '左轉 / 右轉' };
-        return singleMapping[turns[0]] || { icon: 'straight', label: '直走' };
-    });
-}
-
-function generateDefaultLanes(numLanes) {
-    const lanes = [];
-    for (let i = 0; i < numLanes; i++) {
-        lanes.push({ icon: 'straight', label: '直走' });
-    }
-    return lanes;
-}
-
-// ── Haversine 距離計算（米）──
-function haversine(lat1, lon1, lat2, lon2) {
-    const R = 6371000;
-    const phi1 = lat1 * Math.PI / 180;
-    const phi2 = lat2 * Math.PI / 180;
-    const dphi = (lat2 - lat1) * Math.PI / 180;
-    const dlambda = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dphi / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dlambda / 2) ** 2;
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-}
-
-function toRad(deg) { return deg * Math.PI / 180; }
-function toDeg(rad) { return rad * 180 / Math.PI; }
-
-// ── 方位角計算（度，0=北，順時針）──
-function bearing(lat1, lng1, lat2, lng2) {
-    const dLon = toRad(lng2 - lng1);
-    const y = Math.sin(dLon) * Math.cos(toRad(lat2));
-    const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-              Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
-    let brng = toDeg(Math.atan2(y, x));
-    return ((brng % 360) + 360) % 360;
-}
-
-function normalizeAngle(deg) { return ((deg % 360) + 360) % 360; }
-
-// ── 角度差（-180 到 180）──
-function angleDiff(b1, b2) {
-    let diff = normalizeAngle(b2 - b1);
-    if (diff > 180) diff -= 360;
-    return diff;
-}
-
-// ── 路段長度計算 ──
-function segmentLength(p) {
-    let len = 0;
-    for (let i = 1; i < p.length; i++) {
-        len += haversine(p[i - 1][0], p[i - 1][1], p[i][0], p[i][1]);
-    }
-    return len;
-}
-
-// ── 判斷兩段車道配置是否相同 ──
-function lanesEqual(a, b) {
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-        if (a[i].icon !== b[i].icon || a[i].label !== b[i].label) return false;
-    }
-    return true;
-}
-
-// ── 深拷貝車道配置 ──
-function cloneLanes(lanes) {
-    return lanes.map(l => ({ icon: l.icon, label: l.label }));
-}
-
-// ====================================================================
-//  交叉路口車道推斷引擎
-// ====================================================================
-
-/**
- * 根據交叉路口幾何形狀推斷車道方向。
- *
- * 算法：
- *  1. 計算當前段的到達方位角（路徑最後兩個點的方向）
- *  2. 查找端點附近的「下一段」道路
- *  3. 按角度對每條後續道路進行分類：
- *     angle < -15°  → 左轉
- *     angle > 15°   → 右轉
- *     -15° ~ 15°   → 直行
- *  4. 根據是否有左/右出口分配車道方向：
- *     最左車道：左轉出口 → straight_left；僅左轉 → left
- *     最右車道：右轉出口 → straight_right；僅右轉 → right
- *     中間車道：始終 straight
- */
-function inferLaneDirections(segments) {
-    if (segments.length === 0) return segments;
-
-    console.log(`正在推斷交叉路口的車道方向（共 ${segments.length} 段）…`);
-
-    // 追蹤統計數據
-    let inferredCount = 0;
-    let skipNoIntersection = 0;
-    let skipNoLanes = 0;
-
-    for (let i = 0; i < segments.length; i++) {
-        const seg = segments[i];
-
-        // ── 推斷前進車道 ──
-        if (seg.lanesForward.length > 0) {
-            const result = inferForEndpoint(seg, segments, seg.path, 'forward');
-            if (result.modified) {
-                seg.lanesForward = result.lanes;
-                inferredCount++;
-            }
-        } else {
-            skipNoLanes++;
-        }
-
-        // ── 推斷反向車道（檢查路徑起點，反向行駛）──
-        if (seg.lanesBackward.length > 0) {
-            // 反向行駛的路徑：將 path 反轉
-            const reversedPath = [...seg.path].reverse();
-            const result = inferForEndpoint(seg, segments, reversedPath, 'backward');
-            if (result.modified) {
-                seg.lanesBackward = result.lanes;
-                inferredCount++;
-            }
-        } else {
-            skipNoLanes++;
-        }
-    }
-
-    console.log(`  ✓ 已更新 ${inferredCount} 組車道配置`);
-    console.log(`  ⚠ 略過 ${skipNoLanes} 組（無車道）`);
-    return segments;
-}
-
-/**
- * 對單一端點進行車道推斷
- * @param {Object} seg - 當前路段
- * @param {Array} allSegments - 所有路段
- * @param {Array} path - 路徑座標（可能需要反轉）
- * @param {string} direction - 'forward' 或 'backward'
- * @returns {{ lanes: Array, modified: boolean }}
- */
-function inferForEndpoint(seg, allSegments, path, direction) {
-    const INTERSECTION_RADIUS = 25;  // 交叉路口搜尋半徑（米）- 從 15m 提高以涵蓋 OSM 節點間距
-    const ANGLE_LEFT = -25;           // 左轉角度閾值（從 -15° 放寬）
-    const ANGLE_RIGHT = 25;           // 右轉角度閾值（從 15° 放寬）
-
-    const endpoint = path[path.length - 1];
-
-    // 計算到達方位角（使用最後兩個點）
-    let approachBearing;
-    if (path.length >= 2) {
-        const p1 = path[path.length - 2];
-        const p2 = path[path.length - 1];
-        approachBearing = bearing(p1[0], p1[1], p2[0], p2[1]);
-    } else {
-        return { lanes: direction === 'forward' ? seg.lanesForward : seg.lanesBackward, modified: false };
-    }
-
-    // 查找從端點附近開始的其他路段（與當前路段不同的下一段）
-    const nextSegments = [];
-    for (let j = 0; j < allSegments.length; j++) {
-        const other = allSegments[j];
-        if (other === seg) continue;
-
-        const startPt = other.path[0];
-        const dist = haversine(endpoint[0], endpoint[1], startPt[0], startPt[1]);
-        if (dist < INTERSECTION_RADIUS) {
-            // 計算離開方位角
-            let exitBearing;
-            if (other.path.length >= 2) {
-                exitBearing = bearing(other.path[0][0], other.path[0][1],
-                                       other.path[1][0], other.path[1][1]);
-            } else {
-                exitBearing = bearing(endpoint[0], endpoint[1],
-                                       other.path[0][0], other.path[0][1]);
-            }
-            const diff = angleDiff(approachBearing, exitBearing);
-            const isSameRoad = (other.name === seg.name);
-            nextSegments.push({
-                segment: other,
-                angleDiff: diff,
-                distance: dist,
-                isSameRoad: isSameRoad,
-                exitBearing: exitBearing
-            });
-        }
-    }
-
-    if (nextSegments.length === 0) {
-        return { lanes: direction === 'forward' ? seg.lanesForward : seg.lanesBackward, modified: false };
-    }
-
-    // 分類出口方向
-    const hasLeftExit = nextSegments.some(s => s.angleDiff < ANGLE_LEFT && !s.isSameRoad);
-    const hasRightExit = nextSegments.some(s => s.angleDiff > ANGLE_RIGHT && !s.isSameRoad);
-    const hasStraight = nextSegments.some(s =>
-        s.angleDiff >= ANGLE_LEFT && s.angleDiff <= ANGLE_RIGHT &&
-        (s.isSameRoad || Math.abs(s.angleDiff) < 10)
-    );
-
-    // 如果沒有任何轉彎出口，保持預設直行
-    if (!hasLeftExit && !hasRightExit) {
-        return { lanes: direction === 'forward' ? seg.lanesForward : seg.lanesBackward, modified: false };
-    }
-
-    // 獲取當前的車道配置
-    const currentLanes = direction === 'forward' ? seg.lanesForward : seg.lanesBackward;
-    const newLanes = cloneLanes(currentLanes);
-
-    if (newLanes.length === 0) {
-        return { lanes: newLanes, modified: false };
-    }
-
-    let modified = false;
-
-    // 最左車道 → 檢查是否有左轉出口
-    if (hasLeftExit && newLanes.length >= 1) {
-        if (hasStraight || newLanes.length >= 3) {
-            newLanes[0] = { icon: 'straight_left', label: '直走 / 左轉' };
-        } else {
-            // 僅有左轉出口（T 字路口或道路終點）
-            newLanes[0] = { icon: 'left', label: '左轉' };
-        }
-        // 多車道（4+）：第二車道也可能是直走+左轉
-        if (newLanes.length >= 4) {
-            newLanes[1] = { icon: 'straight_left', label: '直走 / 左轉' };
-        }
-        modified = true;
-    }
-
-    // 最右車道 → 檢查是否有右轉出口
-    const rightIdx = newLanes.length - 1;
-    if (hasRightExit && rightIdx >= 0) {
-        if (hasStraight || newLanes.length >= 3) {
-            newLanes[rightIdx] = { icon: 'straight_right', label: '直走 / 右轉' };
-        } else {
-            newLanes[rightIdx] = { icon: 'right', label: '右轉' };
-        }
-        // 多車道（4+）：倒數第二車道也可能是直走+右轉
-        if (newLanes.length >= 4 && rightIdx >= 3) {
-            newLanes[rightIdx - 1] = { icon: 'straight_right', label: '直走 / 右轉' };
-        }
-        modified = true;
-    }
-
-    // 如果左右車道都有轉彎，檢查是否需要合併為 left_right（極少見情況）
-    if (hasLeftExit && hasRightExit && newLanes.length === 1 && hasStraight) {
-        newLanes[0] = { icon: 'left_right', label: '左轉 / 右轉' };
-        modified = true;
-    }
-
-    return { lanes: newLanes, modified };
-}
-
-// ====================================================================
-//  主處理邏輯（從 OSM 提取道路）
-// ====================================================================
-
-const roadDatabase = [];
-let idCounter = 1;
-
-ways.forEach(way => {
+  for (const way of acceptedWays) {
     const tags = way.tags || {};
-    if (!includeHighways.has(tags.highway)) return;
-
-    const name = tags.name || tags['name:zh'] || tags['name:en'] || tags.ref;
-    if (!name || shouldExclude(name)) return;
-
-    const refs = way.refs || way.nodes;
-    if (!refs || refs.length < 2) return;
-
-    const rawPath = refs.map(nid => nodes[nid]).filter(c => c);
-    if (rawPath.length < 2) return;
-
-    // ── 解析單向屬性 ──
-    const isOneway = tags.oneway === 'yes' || tags.oneway === 'true' || tags.oneway === '1';
-    const isReverseOneway = tags.oneway === '-1';
-    const isRoundabout = tags.junction === 'roundabout';
-
-    // ── 計算車道數 ──
-    const totalLanes = tags.lanes ? parseInt(tags.lanes, 10) : null;
-    const forwardCount = tags['lanes:forward'] ? parseInt(tags['lanes:forward'], 10) : null;
-    const backwardCount = tags['lanes:backward'] ? parseInt(tags['lanes:backward'], 10) : null;
-
-    let fwdCount, bwdCount;
-    const defaultLanes = defaultLanesByType[tags.highway] || 1;
-
-    if (isOneway || isRoundabout) {
-        fwdCount = totalLanes || defaultLanes;
-        bwdCount = 0;
-    } else if (isReverseOneway) {
-        fwdCount = 0;
-        bwdCount = totalLanes || defaultLanes;
-    } else {
-        if (forwardCount !== null && backwardCount !== null) {
-            fwdCount = forwardCount;
-            bwdCount = backwardCount;
-        } else if (totalLanes !== null) {
-            if (forwardCount !== null) {
-                fwdCount = forwardCount;
-                bwdCount = totalLanes - forwardCount;
-            } else if (backwardCount !== null) {
-                bwdCount = backwardCount;
-                fwdCount = totalLanes - backwardCount;
-            } else {
-                fwdCount = Math.ceil(totalLanes / 2);
-                bwdCount = Math.floor(totalLanes / 2);
-            }
-        } else {
-            fwdCount = defaultLanes;
-            bwdCount = defaultLanes;
-        }
+    const name = resolveName(tags).primary;
+    if (!name) {
+      skippedByName++;
+      continue;
+    }
+    if (shouldExclude(name, excluder)) {
+      skippedByName++;
+      continue;
     }
 
-    fwdCount = Math.max(0, fwdCount);
-    bwdCount = Math.max(0, bwdCount);
+    // 預處理路徑（去重 + 簡化 + 切段）
+    const segs = preprocessWay(
+      way.nodes, nodeCoords,
+      graph.intersectionNodes, graph.endpointNodes,
+      tags.highway
+    );
+    if (segs.length === 0) {
+      skippedByCoords++;
+      continue;
+    }
 
-    const origFwdCount = fwdCount;
-    const origBwdCount = bwdCount;
+    // 解決車道數
+    const counts = resolveLaneCounts(tags);
 
-    // ── 先嘗試從 OSM turn:lanes 獲取精確車道方向 ──
-    const forwardLanesTag = tags['turn:lanes:forward'];
-    const backwardLanesTag = tags['turn:lanes:backward'];
-    const bothLanesTag = tags['turn:lanes'];
-
+    // 解析 turn:lanes
+    const turnForwardTag = tags['turn:lanes:forward'];
+    const turnBackwardTag = tags['turn:lanes:backward'];
+    const turnBothTag = tags['turn:lanes'];
     let hasOsmTurnData = false;
-    let lanesForward, lanesBackward;
+    let turnData = null;
 
-    if (bothLanesTag && !forwardLanesTag && !backwardLanesTag) {
-        hasOsmTurnData = true;
-        const parsed = parseTurnLanes(bothLanesTag);
-        // 處理車道數不匹配：turn:lanes 數量與 fwd+bwd 不一致時，以 parsed 為準重新分配
-        const parsedCount = parsed.length;
-        const expectedCount = fwdCount + bwdCount;
-        if (parsedCount !== expectedCount) {
-            // 根據 turn:lanes 的實際數量重新分配前後向車道數
-            // 假設前後向車道數與 osm lanes 標籤比例一致
-            const ratio = expectedCount > 0 ? fwdCount / expectedCount : 0.5;
-            fwdCount = Math.max(0, Math.round(parsedCount * ratio));
-            bwdCount = parsedCount - fwdCount;
-        }
-        lanesForward = parsed.slice(0, fwdCount);
-        lanesBackward = parsed.slice(-bwdCount);
-    } else if (forwardLanesTag || backwardLanesTag) {
-        hasOsmTurnData = true;
-        const parsedFwd = forwardLanesTag ? parseTurnLanes(forwardLanesTag) : null;
-        const parsedBwd = backwardLanesTag ? parseTurnLanes(backwardLanesTag) : null;
-        // 如果有方向專用 turn:lanes，以 parse 結果為準調整車道數
-        if (parsedFwd && parsedFwd.length !== fwdCount) fwdCount = parsedFwd.length;
-        if (parsedBwd && parsedBwd.length !== bwdCount) bwdCount = parsedBwd.length;
-        lanesForward = parsedFwd || generateDefaultLanes(fwdCount);
-        lanesBackward = parsedBwd || generateDefaultLanes(bwdCount);
-    } else {
-        // 無 OSM 轉彎資料 → 使用預設直行車道（後續將由交叉路口推斷更新）
-        lanesForward = generateDefaultLanes(fwdCount);
-        lanesBackward = generateDefaultLanes(bwdCount);
+    if (turnBothTag && !turnForwardTag && !turnBackwardTag) {
+      hasOsmTurnData = true;
+      turnData = parseTurnLanes(turnBothTag, counts.forward + counts.backward);
+    } else if (turnForwardTag || turnBackwardTag) {
+      hasOsmTurnData = true;
+      turnData = {
+        forward: turnForwardTag ? parseTurnLanes(turnForwardTag, counts.forward) : null,
+        backward: turnBackwardTag ? parseTurnLanes(turnBackwardTag, counts.backward) : null,
+      };
     }
+    if (hasOsmTurnData) osmTurnWays++;
 
-    if (isRoundabout) {
-        lanesForward = lanesForward.map(() => ({ icon: 'straight', label: '直走' }));
-    }
+    // 為每段構建 Road
+    processedWays++;
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i];
 
-    // ── 提取額外元數據 ──
-    const destinations = [];
-    if (tags['destination:lanes']) {
-        destinations.push(...tags['destination:lanes'].split('|').map(d => d.trim()).filter(d => d));
-    }
-    if (tags['destination:lanes:forward']) {
-        destinations.push(...tags['destination:lanes:forward'].split('|').map(d => d.trim()).filter(d => d));
-    }
-
-    // ── 切分路段：根據方向變化 + 最大長度 + turn:lanes 僅套用終端路段 ──
-    const MAX_SEGMENT_LENGTH = 80;
-    const MIN_SEGMENT_LENGTH = 10;
-    const BEARING_CHANGE_THRESHOLD = 35;
-    const TERMINAL_DISTANCE = 80;
-
-    // 預先計算每個路徑點的累積距離（用於判斷路段是否靠近 way 起/終點）
-    const cumulativeDist = [0];
-    for (let i = 1; i < rawPath.length; i++) {
-        cumulativeDist.push(cumulativeDist[i - 1] +
-            haversine(rawPath[i - 1][0], rawPath[i - 1][1], rawPath[i][0], rawPath[i][1]));
-    }
-    const wayTotalLength = cumulativeDist[cumulativeDist.length - 1];
-    const useTerminalSplit = hasOsmTurnData && wayTotalLength > TERMINAL_DISTANCE * 2;
-
-    const segments = [];
-    let segStartIdx = 0;
-    let currentSeg = {
-        path: [rawPath[0]],
-        lanesForward: lanesForward,
-        lanesBackward: lanesBackward,
-        hasOsmTurnData: hasOsmTurnData,
-        len: 0
-    };
-
-    const bearings = [];
-    for (let i = 1; i < rawPath.length; i++) {
-        bearings.push(bearing(rawPath[i-1][0], rawPath[i-1][1], rawPath[i][0], rawPath[i][1]));
-    }
-
-    for (let i = 1; i < rawPath.length; i++) {
-        const point = rawPath[i];
-        const prevPoint = rawPath[i - 1];
-        const dist = haversine(prevPoint[0], prevPoint[1], point[0], point[1]);
-
-        currentSeg.path.push(point);
-        currentSeg.len += dist;
-
-        let bearingChange = false;
-        if (i >= 2 && currentSeg.len >= MIN_SEGMENT_LENGTH) {
-            const prevBearing = bearings[i - 2];
-            const currBearing = bearings[i - 1];
-            let diff = Math.abs(angleDiff(prevBearing, currBearing));
-            if (diff > BEARING_CHANGE_THRESHOLD) bearingChange = true;
-        }
-
-        const isEnd = i === rawPath.length - 1;
-        const tooLong = currentSeg.len >= MAX_SEGMENT_LENGTH;
-        const shouldSplit = isEnd || tooLong || bearingChange;
-
-        if (shouldSplit) {
-            const segEndDist = cumulativeDist[i];
-            const segStartDist = cumulativeDist[segStartIdx];
-
-            if (useTerminalSplit) {
-                const nearEnd = (wayTotalLength - segEndDist) < TERMINAL_DISTANCE;
-                const nearStart = segStartDist < TERMINAL_DISTANCE;
-
-                currentSeg.lanesForward = nearEnd ? lanesForward : generateDefaultLanes(origFwdCount);
-                currentSeg.lanesBackward = nearStart ? lanesBackward : generateDefaultLanes(origBwdCount);
-                currentSeg.hasOsmTurnData = nearEnd || nearStart;
-            }
-
-            segments.push(currentSeg);
-            segStartIdx = i;
-            currentSeg = {
-                path: [point],
-                lanesForward: lanesForward,
-                lanesBackward: lanesBackward,
-                hasOsmTurnData: hasOsmTurnData,
-                len: 0
-            };
-        }
-    }
-
-    // 輸出路段（過濾太短的路段）
-    segments.forEach(seg => {
-        if (seg.len < MIN_SEGMENT_LENGTH && segments.length > 1) return;
-
-        const roadData = {
-            id: `road_${idCounter++}`,
-            name: name,
-            path: seg.path,
-            lanesForward: seg.lanesForward,
-            lanesBackward: seg.lanesBackward,
-            highway: tags.highway,
-            oneway: isOneway || isReverseOneway || isRoundabout,
-            length: Math.round(seg.len * 100) / 100,
-            _hasOsmTurnData: seg.hasOsmTurnData || false  // 標記是否來自精確 OSM 數據
-        };
-
-        if (destinations.length > 0) {
-            roadData.destinations = destinations;
-        }
-        if (isRoundabout) {
-            roadData.junction = 'roundabout';
-        }
-        if (isReverseOneway) {
-            roadData.reversed = true;
-        }
-
-        roadDatabase.push(roadData);
-    });
-});
-
-// ====================================================================
-//  步驟 1：交叉路口車道推斷（僅處理無 OSM turn 數據的路段）
-// ====================================================================
-
-// 分離有/無精確 OSM turn 數據的路段
-const osmTurnSegments = roadDatabase.filter(r => r._hasOsmTurnData);
-const inferSegments = roadDatabase.filter(r => !r._hasOsmTurnData);
-
-console.log(`\n已從 OSM 提取 ${roadDatabase.length} 個路段`);
-console.log(`  有精確 turn 數據: ${osmTurnSegments.length} 段（跳過推斷）`);
-console.log(`  無 turn 數據: ${inferSegments.length} 段（將進行推斷）`);
-
-// 對無 turn 數據的路段進行推斷
-inferLaneDirections(inferSegments);
-
-// 合併回去
-const allSegments = [...osmTurnSegments, ...inferSegments];
-
-// ====================================================================
-//  步驟 2：合併相鄰相同配置的路段
-// ====================================================================
-
-function mergeSegments(roads) {
-    if (roads.length === 0) return roads;
-
-    const merged = [roads[0]];
-
-    for (let i = 1; i < roads.length; i++) {
-        const prev = merged[merged.length - 1];
-        const curr = roads[i];
-
-        const canMerge =
-            !prev._manualOverride && !curr._manualOverride &&
-            prev.name === curr.name &&
-            prev.highway === curr.highway &&
-            prev.oneway === curr.oneway &&
-            prev.reversed === curr.reversed &&
-            lanesEqual(prev.lanesForward, curr.lanesForward) &&
-            lanesEqual(prev.lanesBackward, curr.lanesBackward) &&
-            JSON.stringify(prev.destinations || []) === JSON.stringify(curr.destinations || []) &&
-            prev._hasOsmTurnData === curr._hasOsmTurnData;
-
-        if (canMerge &&
-            prev.path[prev.path.length - 1][0] === curr.path[0][0] &&
-            prev.path[prev.path.length - 1][1] === curr.path[0][1]) {
-            prev.path = prev.path.concat(curr.path.slice(1));
-            prev.length = Math.round((prev.length + curr.length) * 100) / 100;
+      // 車道分配
+      let lf, lb;
+      if (turnData) {
+        if (turnData.forward || turnData.backward) {
+          lf = turnData.forward || defaultStraightLanes(counts.forward);
+          lb = turnData.backward || defaultStraightLanes(counts.backward);
         } else {
-            merged.push(curr);
+          // 雙向共用
+          lf = turnData.slice(0, counts.forward);
+          lb = turnData.slice(counts.forward);
         }
-    }
+      } else {
+        lf = defaultStraightLanes(counts.forward);
+        lb = defaultStraightLanes(counts.backward);
+      }
 
-    return merged;
-}
+      // 環形交叉口：全部視為直走
+      if (tags.junction === 'roundabout') {
+        lf = lf.map(() => ({ icon: 'straight', label: '直走' }));
+        lb = lb.map(() => ({ icon: 'straight', label: '直走' }));
+      }
 
-// ====================================================================
-//  步驟 2.5：先應用手動修正（在合併前標記，避免合併手動切分的路段）
-// ====================================================================
+      const dest = [];
+      if (tags['destination:lanes']) {
+        dest.push(...tags['destination:lanes'].split('|').map(d => d.trim()).filter(Boolean));
+      }
 
-const overridesFile = path.join(cityDir, 'lane_overrides.json');
-const overrides = loadOverrides();
-applyOverrides(allSegments, overrides);
-
-// ====================================================================
-//  步驟 3：合併相鄰相同配置的路段（跳過有手動修正的路段）
-// ====================================================================
-
-let finalDatabase = mergeSegments(allSegments);
-
-// ====================================================================
-//  （函數定義保留於下方）
-// ====================================================================
-
-function loadOverrides() {
-    if (!fs.existsSync(overridesFile)) {
-        console.log('\n⚠ 未找到 lane_overrides.json，跳過手動修正');
-        return [];
-    }
-    try {
-        const overrides = JSON.parse(fs.readFileSync(overridesFile, 'utf8'));
-        console.log(`\n已載入 ${overrides.length} 條手動修正`);
-        return overrides;
-    } catch (e) {
-        console.error('\n⚠ 無法解析 lane_overrides.json:', e.message);
-        return [];
-    }
-}
-
-function applyOverrides(roads, overrides) {
-    if (overrides.length === 0) return roads;
-
-    let applied = 0;
-    overrides.forEach(override => {
-        // 按 GPS 座標匹配：找到距離最近的路段
-        let bestRoad = null;
-        let bestDist = Infinity;
-
-        roads.forEach(road => {
-            road.path.forEach(pt => {
-                const d = haversine(override.lat, override.lng, pt[0], pt[1]);
-                if (d < bestDist) {
-                    bestDist = d;
-                    bestRoad = road;
-                }
+      // 用真實路口推斷（僅在無 OSM turn 數據時）
+      let inferredLanes = false;
+      if (!hasOsmTurnData) {
+        // 推斷末端（forward 方向）
+        if (lf.length > 0 && seg.path.length >= 2) {
+          const endBranch = listBranchesAtEnd(graph, way, seg, nodeCoords);
+          if (endBranch.length > 0) {
+            const result = inferLanesForEndpoint({
+              path: seg.path,
+              direction: 'forward',
+              myWayName: name,
+              branches: endBranch,
+              currentLanes: lf,
             });
-        });
-
-        if (bestRoad && bestDist < 250) {  // 250 米內匹配
-            bestRoad._manualOverride = true;
-            if (override.lanesForward) {
-                bestRoad.lanesForward = override.lanesForward;
+            if (result.modified) {
+              lf = result.lanes;
+              inferredLanes = true;
             }
-            if (override.lanesBackward) {
-                bestRoad.lanesBackward = override.lanesBackward;
-            }
-            applied++;
-            console.log(`  ✓ 已應用修正: ${override.comment || override.name || '(無名稱)'} (距離 ${Math.round(bestDist)}m)`);
-        } else if (bestRoad) {
-            console.log(`  ⚠ 修正點太遠 (${Math.round(bestDist)}m)，已跳過: ${override.comment || override.name || ''}`);
-        } else {
-            console.log(`  ⚠ 找不到匹配路段: ${override.comment || override.name || ''}`);
+          }
         }
-    });
+        // 推斷起點（backward 方向）
+        if (lb.length > 0 && seg.path.length >= 2) {
+          const startBranch = listBranchesAtStart(graph, way, seg, nodeCoords);
+          if (startBranch.length > 0) {
+            const result = inferLanesForEndpoint({
+              path: [...seg.path].reverse(),
+              direction: 'backward',
+              myWayName: name,
+              branches: startBranch,
+              currentLanes: lb,
+            });
+            if (result.modified) {
+              lb = result.lanes;
+              inferredLanes = true;
+            }
+          }
+        }
+      }
 
-    console.log(`  ✓ 共應用了 ${applied}/${overrides.length} 條手動修正`);
-    return roads;
+      const r = buildRoad({
+        id: `way_${way.id}_seg_${i}`,
+        name,
+        path: seg.path,
+        tags,
+        lanesForward: lf,
+        lanesBackward: lb,
+        destinations: dest,
+        _hasOsmTurnData: hasOsmTurnData,
+      });
+      r._hadOsmTurn = hasOsmTurnData;
+      r._inferred = inferredLanes;
+      allSegments.push(r);
+    }
+  }
+
+  console.log(`  ✓ 處理 ${processedWays} 條 way，跳過 ${skippedByName} (名稱) + ${skippedByCoords} (座標)`);
+  console.log(`  ✓ 產生 ${allSegments.length} 個初始路段`);
+  console.log(`  ✓ 帶 OSM turn:lanes 數據: ${osmTurnWays} 條 way`);
+
+  // 微段合併（按 way 群組）
+  const segsByWay = new Map();
+  for (const seg of allSegments) {
+    const wid = seg.id.split('_seg_')[0];
+    if (!segsByWay.has(wid)) segsByWay.set(wid, []);
+    segsByWay.get(wid).push(seg);
+  }
+  let mergedMicro = 0;
+  for (const [, group] of segsByWay.entries()) {
+    const before = group.length;
+    const after = mergeMicroSegments(group, (s) => s.name);
+    if (after.length < before) {
+      // 把合併掉的從 allSegments 移除
+      const toRemove = new Set(group.filter(s => !after.includes(s)));
+      for (let i = allSegments.length - 1; i >= 0; i--) {
+        if (toRemove.has(allSegments[i])) allSegments.splice(i, 1);
+      }
+      mergedMicro += before - after.length;
+    }
+  }
+  console.log(`  ✓ 微段合併: 移除 ${mergedMicro} 個短段`);
+
+  // 手動修正（在合併前）。--no-overrides 可關閉。
+  const overrides = args.noOverrides
+    ? []
+    : loadOverrides(path.join(cityDir, 'lane_overrides.json'));
+  if (overrides.length > 0) {
+    const result = applyOverrides(allSegments, overrides);
+    console.log(`  ✓ 手動修正: 套用 ${result.applied}/${overrides.length} 條`);
+    for (const d of result.details) {
+      if (d.status === 'applied') {
+        console.log(`      · ${d.comment} → ${d.road} (${d.distance}m)`);
+      } else if (d.status === 'too-far') {
+        console.log(`      ⚠ ${d.comment} 距離太遠 (${d.distance}m)`);
+      } else {
+        console.log(`      ⚠ ${d.comment} 找不到匹配`);
+      }
+    }
+  }
+
+  // 排序（讓合併後的順序穩定）
+  allSegments.sort((a, b) => {
+    if (a.name !== b.name) return a.name.localeCompare(b.name, 'zh');
+    return a.path[0][0] - b.path[0][0];
+  });
+
+  // 合併相鄰相容路段
+  const beforeMerge = allSegments.length;
+  const final = args.noMerge ? allSegments : mergeRoads(allSegments);
+  console.log(`  ✓ 路段合併: ${beforeMerge} → ${final.length}（移除 ${beforeMerge - final.length} 條冗餘）`);
+
+  // 清理內部欄位 + 重新編號
+  const cleaned = finalize(final);
+
+  // 統計 + 報告
+  const stats = summarize(cleaned);
+  console.log(formatReport(stats));
+
+  // 寫入
+  fs.writeFileSync(outputFile, JSON.stringify(cleaned, null, 2), 'utf8');
+  const sizeMB = (fs.statSync(outputFile).size / 1024 / 1024).toFixed(2);
+  console.log(`  ✓ 已輸出: ${outputFile} (${sizeMB} MB, ${((Date.now() - t0) / 1000).toFixed(1)}s)`);
 }
 
-// overrides 已在上方合併前套用
+/**
+ * 給定當前 way 與 segment，找出在 segment 末端（path 最後一點）相鄰的其他 way。
+ */
+function listBranchesAtEnd(graph, way, seg, nodeCoords) {
+  // 末端節點 id
+  const endPt = seg.path[seg.path.length - 1];
+  const shared = findSharedNodeId(seg.path, endPt, nodeCoords, graph);
+  if (shared === null) return [];
 
-// ── 統計（在清理內部標記前計算）──
-const totalSegments = finalDatabase.length;
-const withOsmTurn = allSegments.filter(r => r._hasOsmTurnData).length;
-let inferredLaneSegments = 0;
-finalDatabase.forEach(r => {
-    const hasInferred = r.lanesForward.some(l => l.icon !== 'straight') ||
-                        r.lanesBackward.some(l => l.icon !== 'straight');
-    if (hasInferred) inferredLaneSegments++;
-});
+  const exitBearing = endpointBearing(seg.path);
+  if (exitBearing === null) return [];
 
-// 清理內部標記
-finalDatabase.forEach(r => {
-    delete r._hasOsmTurnData;
-    delete r._manualOverride;
-});
+  const branches = [];
+  for (const [otherId, otherNodes] of graph.wayById.entries()) {
+    if (otherId === way.id) continue;
+    if (otherNodes.length < 2) continue;
+    let otherRole = null;
+    if (otherNodes[0] === shared) otherRole = 'start';
+    else if (otherNodes[otherNodes.length - 1] === shared) otherRole = 'end';
+    if (!otherRole) continue;
 
-// 重新分配 ID
-finalDatabase.forEach((r, idx) => {
-    r.id = `road_${idx + 1}`;
-});
+    // 計算 other way 從 shared 點「離開」的方向
+    let otherBearing;
+    if (otherRole === 'start') {
+      // way 從 shared 出發，第二節點 = otherNodes[1]
+      const next = nodeCoords.get(otherNodes[1]);
+      if (!next) continue;
+      otherBearing = geo.bearing(endPt[0], endPt[1], next[0], next[1]);
+    } else {
+      // way 在 shared 結束，倒數第二節點 = otherNodes[-2]
+      const prev = nodeCoords.get(otherNodes[otherNodes.length - 2]);
+      if (!prev) continue;
+      const approachBearing = geo.bearing(prev[0], prev[1], endPt[0], endPt[1]);
+      otherBearing = (approachBearing + 180) % 360;
+    }
+    const diff = geo.angleDiff(exitBearing, otherBearing);
+    if (Math.abs(diff) < 15) continue; // 同向忽略
 
-fs.writeFileSync(outputFile, JSON.stringify(finalDatabase, null, 2), 'utf8');
+    branches.push({
+      wayId: otherId,
+      angle: diff,
+      otherName: way.tags?.name || '',
+    });
+  }
+  return branches;
+}
 
-console.log('\n═══════════════════════════════════');
-console.log('  建立完成');
-console.log('═══════════════════════════════════');
-console.log(`  原始路段數:    ${roadDatabase.length}`);
-console.log(`  合併後路段數:  ${finalDatabase.length}`);
-console.log(`  有 OSM turn:   ${withOsmTurn}`);
-console.log(`  有推斷車道方向: ${inferredLaneSegments}`);
-console.log(`  已輸出:        ${outputFile}`);
+function listBranchesAtStart(graph, way, seg, nodeCoords) {
+  const startPt = seg.path[0];
+  const shared = findSharedNodeId(seg.path, startPt, nodeCoords, graph);
+  if (shared === null) return [];
+
+  const exitBearing = startBearing(seg.path);
+  if (exitBearing === null) return [];
+
+  const branches = [];
+  for (const [otherId, otherNodes] of graph.wayById.entries()) {
+    if (otherId === way.id) continue;
+    if (otherNodes.length < 2) continue;
+    let otherRole = null;
+    if (otherNodes[0] === shared) otherRole = 'start';
+    else if (otherNodes[otherNodes.length - 1] === shared) otherRole = 'end';
+    if (!otherRole) continue;
+
+    let otherBearing;
+    if (otherRole === 'start') {
+      const next = nodeCoords.get(otherNodes[1]);
+      if (!next) continue;
+      otherBearing = geo.bearing(startPt[0], startPt[1], next[0], next[1]);
+    } else {
+      const prev = nodeCoords.get(otherNodes[otherNodes.length - 2]);
+      if (!prev) continue;
+      const approachBearing = geo.bearing(prev[0], prev[1], startPt[0], startPt[1]);
+      otherBearing = (approachBearing + 180) % 360;
+    }
+    const diff = geo.angleDiff(exitBearing, otherBearing);
+    if (Math.abs(diff) < 15) continue;
+
+    branches.push({ wayId: otherId, angle: diff, otherName: way.tags?.name || '' });
+  }
+  return branches;
+}
+
+/**
+ * 給定路徑末端座標，找對應的 OSM node id。
+ * 因為我們已做過 RDP 簡化，需要用容差匹配。
+ */
+function findSharedNodeId(path, point, nodeCoords, graph) {
+  // 從 path 中找最接近的原始節點（簡化前）
+  // 為避免 O(N)，直接從 nodeCoords 反查：以該座標為 key 找最近的
+  // 實作：先看座標是否精確匹配
+  for (const [nid, coord] of nodeCoords.entries()) {
+    if (coord[0] === point[0] && coord[1] === point[1]) {
+      return nid;
+    }
+  }
+  // 否則用 1.5m 容差掃描路口節點
+  for (const nid of graph.intersectionNodes) {
+    const coord = nodeCoords.get(nid);
+    if (!coord) continue;
+    if (geo.haversine(point[0], point[1], coord[0], coord[1]) < 1.5) {
+      return nid;
+    }
+  }
+  for (const nid of graph.endpointNodes) {
+    const coord = nodeCoords.get(nid);
+    if (!coord) continue;
+    if (geo.haversine(point[0], point[1], coord[0], coord[1]) < 1.5) {
+      return nid;
+    }
+  }
+  return null;
+}
+
+if (require.main === module) {
+  try {
+    main();
+  } catch (e) {
+    console.error('\n✗ 失敗:', e.message);
+    console.error(e.stack);
+    process.exit(1);
+  }
+}
+
+module.exports = { main };
